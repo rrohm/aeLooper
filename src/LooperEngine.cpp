@@ -162,9 +162,18 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     }
 
     // 2. Let channels that are recording a base take grow their buffers so
-    //    the incoming block fits without per-sample reallocation.
+    //    the incoming block fits without per-sample reallocation. Also push
+    //    the monitor fade ramp length (1 = hard switching when the
+    //    anti-plop feature is disabled).
+    const int fadeRamp = antiPlopEnabled.load(std::memory_order_relaxed)
+        ? juce::jmax(1, (int) (0.005 * sampleRate.load(std::memory_order_relaxed)))
+        : 1;
+
     for (auto& channel : channels)
+    {
         channel.prepareBlock(numSamples);
+        channel.setFadeRampLength(fadeRamp);
+    }
 
     // 3. Transport and per-sample processing. The input is read once, every
     //    channel produces a contribution, and the sum is written back. The

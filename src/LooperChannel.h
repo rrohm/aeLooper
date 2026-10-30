@@ -106,6 +106,11 @@ public:
         setState(LoopState::empty);
     }
 
+    /** Audio thread: length of the monitor/playback fade ramp in samples
+        (1 = hard switching). */
+    void setFadeRampLength(int lengthSamples) noexcept
+    { fadeRampLength = juce::jmax(1, lengthSamples); }
+
     /** Audio thread: begin the armed take once the clock reaches the target. */
     void checkArmedStart(int64_t absolutePosition);
 
@@ -167,4 +172,13 @@ private:
     int64_t recordLength = 0;                  // samples of the current base take
     int64_t pendingStopBoundary = -1;         ///< quantized stop target (samples), -1 = none
     int64_t armedStartPos = -1;               ///< beat-clock position of an armed take start
+
+    // Anti-plop fades: gains of the channel's output contribution. The
+    // input-monitor gain fades in when recording/overdubbing starts (and out
+    // on stop), the playback gain fades in when loop playback starts - so
+    // state changes are click-free crossfades. Never applied to the recorded
+    // buffer content.
+    int fadeRampLength = 1;                   // samples for a full 0->1 ramp
+    float monitorInGain = 0.0f;
+    float bufferGain = 0.0f;
 };

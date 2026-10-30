@@ -25,6 +25,17 @@ void LooperChannel::prepareBlock(int numSamplesInBlock)
                         true, false, false);
 }
 
+namespace
+{
+/** Move `current` toward `target` by at most `step` (per-sample fade). */
+float approachGain (float current, float target, float step) noexcept
+{
+    if (current < target)
+        return juce::jmin (target, current + step);
+    return juce::jmax (target, current - step);
+}
+}
+
 void LooperChannel::processSample(float inL, float inR, float& outL, float& outR,
                                   int64_t positionInLoop, int64_t loopLength,
                                   int64_t latencySamples)
@@ -35,6 +46,20 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
     const auto st = state.load(std::memory_order_relaxed);
     const bool mute = muted.load(std::memory_order_relaxed);
     const int bufChannels = juce::jmin(buffer.getNumChannels(), 2);
+
+    // Anti-plop fades: the input-monitor component fades in while
+    // recording/overdubbing, the playback component while playing/overdubbing.
+    // With a ramp length of 1 (feature disabled) this is a hard switch.
+    const float step = 1.0f / (float) fadeRampLength;
+    monitorInGain = approachGain(monitorInGain,
+                                 (st == LoopState::recording || st == LoopState::overdubbing) ? 1.0f : 0.0f,
+                                 step);
+    bufferGain = approachGain(bufferGain,
+                              (st == LoopState::playing || st == LoopState::overdubbing) ? 1.0f : 0.0f,
+                              step);
+
+    float bufCompL = 0.0f, bufCompR = 0.0f;   // loop-playback component
+    float inCompL = 0.0f, inCompR = 0.0f;    // input-monitor component
 
     switch (st)
     {
@@ -53,8 +78,8 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
                     buffer.setSample(1, (int) writeIndex, inR);
             }
             ++recordLength;
-            outL = inL;
-            outR = inR;
+            inCompL = inL;
+            inCompR = inR;
             break;
         }
 
@@ -68,14 +93,16 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
                 buffer.setSample(0, idx, juce::jlimit(-1.0f, 1.0f, l));
                 if (bufChannels > 1)
                     buffer.setSample(1, idx, juce::jlimit(-1.0f, 1.0f, r));
-                outL = l;
-                outR = r;
+                bufCompL = l;
+                bufCompR = r;
             }
             else
             {
-                outL = inL;
-                outR = inR;
+                bufCompL = inL;
+                bufCompR = inR;
             }
+            inCompL = inL;
+            inCompR = inR;
             break;
         }
 
@@ -84,8 +111,8 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
             const int idx = (int) juce::jlimit((int64_t) 0, loopLength - 1, positionInLoop);
             if (idx < buffer.getNumSamples())
             {
-                outL = buffer.getSample(0, idx);
-                outR = bufChannels > 1 ? buffer.getSample(1, idx) : outL;
+                bufCompL = buffer.getSample(0, idx);
+                bufCompR = bufChannels > 1 ? buffer.getSample(1, idx) : bufCompL;
             }
             break;
         }
@@ -95,6 +122,9 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
         case LoopState::empty:
             break;
     }
+
+    outL = bufCompL * bufferGain + inCompL * monitorInGain;
+    outR = bufCompR * bufferGain + inCompR * monitorInGain;
 
     if (mute)
     {

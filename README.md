@@ -59,6 +59,13 @@ One codebase builds both a standalone application and a VST3 plugin.
   tempo and time signature). Without a host, or while the transport is
   stopped, the last known grid offset is kept (initially the internal
   grid). The time signature follows the host numerator when available.
+- **Anti-plop monitor fades** (internal flag, `LooperEngine::setAntiPlopEnabled`,
+  default on, reserved for a future settings dialog): when a channel starts
+  recording or overdubbing, its input monitoring fades in over ~5 ms instead
+  of switching hard; on stop it fades out again, and loop playback fades in
+  likewise, so every state change is a click-free crossfade. The fades apply
+  only to the monitoring contribution - recorded buffer content is never
+  faded, so attacks of played material stay intact.
 - **Clearing all channels frees the loop length**: when every channel is
   empty, the next recording defines a fresh loop length (and a fresh bar
   grid).

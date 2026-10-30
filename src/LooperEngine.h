@@ -63,6 +63,18 @@ public:
     int64_t getLatency() const noexcept
     { return latencySamples.load(std::memory_order_relaxed); }
 
+    /**
+        Anti-plop monitor fades: when enabled (default), a channel's input
+        monitoring fades in over ~5 ms when recording/overdubbing starts and
+        out on stop, and loop playback fades in likewise, so state changes
+        are click-free crossfades. Recorded buffer content is never faded.
+        Internal flag - reserved for a future settings dialog.
+    */
+    void setAntiPlopEnabled(bool enabled) noexcept
+    { antiPlopEnabled.store(enabled, std::memory_order_relaxed); }
+    bool isAntiPlopEnabled() const noexcept
+    { return antiPlopEnabled.load(std::memory_order_relaxed); }
+
     // ---- host grid (audio thread, called by PluginProcessor) ----
     /**
         Feed the host transport position (in host samples, valid while the
@@ -143,6 +155,7 @@ private:
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
     std::atomic<bool> quantizeEnabled { false };
     std::atomic<bool> metronomeEnabled { false };
+    std::atomic<bool> antiPlopEnabled { true };
     std::atomic<int64_t> latencySamples { 0 };
     std::atomic<double> userBpm { 120.0 };
     std::atomic<double> hostBpm { 120.0 };
