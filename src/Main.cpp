@@ -21,6 +21,10 @@ public:
 
         audioDeviceManager.initialiseWithDefaultDevices(2, 2);
 
+        // Register the player as audio callback; without this the device
+        // runs but processBlock() is never invoked.
+        audioDeviceManager.addAudioCallback(&player);
+
         // Enable the first available MIDI input; its events are forwarded to
         // the processor by the AudioProcessorPlayer.
         const auto midiInputs = juce::MidiInput::getAvailableDevices();
@@ -42,6 +46,7 @@ public:
     ~MainWindow() override
     {
         player.setProcessor(nullptr);
+        audioDeviceManager.removeAudioCallback(&player);
         if (midiInputId.isNotEmpty())
             audioDeviceManager.removeMidiInputDeviceCallback(midiInputId, &player);
         audioDeviceManager.closeAudioDevice();
