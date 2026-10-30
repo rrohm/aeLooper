@@ -7,24 +7,23 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff23262c));
     g.fillRoundedRectangle(bounds, cornerRadius);
 
-    // Waveform of the loop content as background (dimmed when it is the
-    // undone/redoable layer rather than what is currently heard).
+    // Waveform as background, anchored at the bottom edge (zero line one
+    // half-height above the bottom, so the shape occupies the lower half).
+    // Dimmed like a disabled button; extra-dim when showing the redoable
+    // layer rather than what is currently heard.
     if (waveColumns > 0)
     {
-        auto waveColour = juce::Colour(0xff4a6fa5);
-        if (waveIsRedo)
-            waveColour = waveColour.withAlpha(0.45f);
+        g.setColour(juce::Colours::lightgrey.withAlpha(waveIsRedo ? 0.22f : 0.45f));
 
-        g.setColour(waveColour);
-
-        const float midY = bounds.getCentreY();
-        const float halfH = juce::jmax(1.0f, bounds.getHeight() * 0.5f - 2.0f);
+        const float bottom = bounds.getBottom() - 2.0f;
+        const float halfH = juce::jmax(1.0f, (bounds.getHeight() - 4.0f) * 0.5f);
+        const float zeroY = bottom - halfH;
 
         for (int c = 0; c < waveColumns; ++c)
         {
             const float x = bounds.getX() + (c + 0.5f) * bounds.getWidth() / (float) waveColumns;
-            const float y1 = midY - waveMax[(size_t) c] * halfH;
-            const float y2 = midY - waveMin[(size_t) c] * halfH;
+            const float y1 = zeroY - juce::jlimit(-1.0f, 1.0f, waveMax[(size_t) c]) * halfH;
+            const float y2 = zeroY - juce::jlimit(-1.0f, 1.0f, waveMin[(size_t) c]) * halfH;
             g.drawLine(x, y1, x, juce::jmax(y1 + 1.0f, y2), 1.0f);
         }
     }
@@ -32,12 +31,10 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
     g.setColour(juce::Colours::darkgrey);
     g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 
+    // Text centered like the button captions.
     g.setColour(juce::Colours::lightgrey);
     g.setFont(font);
-
-    // Left padding equals the horizontal gap between the strip controls.
-    auto textArea = bounds.reduced((float) UiPanel::stripGap, 0.0f);
-    g.drawFittedText(text, textArea.toNearestInt(), juce::Justification::centredLeft, 1);
+    g.drawFittedText(text, bounds.reduced(2.0f).toNearestInt(), juce::Justification::centred, 1);
 }
 
 void UiPanel::StatusBar::paint(juce::Graphics& g)
