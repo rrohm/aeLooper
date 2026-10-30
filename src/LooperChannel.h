@@ -64,6 +64,24 @@ public:
     int getRedoDepth() const noexcept { return redoDepth.load(std::memory_order_relaxed); }
     /** Peak level of this channel's output contribution (for the meter). */
     float getOutputLevel() const noexcept { return outputLevel.load(std::memory_order_relaxed); }
+
+    /**
+        Waveform thumbnail of the displayed content: the current loop buffer,
+        or - when the channel is empty but the redo stack is not - the top of
+        the redo stack, so the UI can show that there is something to redo.
+        Double-buffered and published via an atomic index; copy it out
+        immediately, the buffer may be overwritten by the next update.
+    */
+    struct WaveformThumb
+    {
+        static constexpr int columns = 256;
+        std::array<float, (size_t) columns> minV {};
+        std::array<float, (size_t) columns> maxV {};
+        int validColumns = 0;
+    };
+
+    const WaveformThumb& getDisplayThumb() const noexcept
+    { return thumbs[(size_t) thumbActive.load(std::memory_order_acquire)]; }
     void pushCommand(Command command) noexcept { commands.push(command); }
     double getContentSeconds(double sampleRate) const noexcept;
 
@@ -90,6 +108,10 @@ public:
 
     /** Publish the block peak to the outputLevel meter. */
     void finishBlock();
+
+    /** Recompute the display thumbnail if the content version changed
+        (throttled to every 8th block while recording/overdubbing). */
+    void updateThumbnailIfNeeded();
 
     /** Audio thread: set the engine beat-clock position at which an armed
         base take shall begin. Only the first call while armed sticks; the
@@ -141,6 +163,12 @@ private:
     /** Push the current state back onto the undo stack (called by redo;
         does not clear the redo stack). */
     void pushCurrentOntoUndo();
+
+    /** Compute a min/max thumbnail of `source` into `thumb` (read-capped). */
+    static void computeThumb(const juce::AudioBuffer<float>& source, WaveformThumb& thumb);
+
+    /** Recompute the display thumbnail into the inactive buffer and flip. */
+    void computeDisplayThumb();
 
     void setState(LoopState newState) noexcept { state.store(newState, std::memory_order_relaxed); }
 
@@ -196,4 +224,11 @@ private:
     int fadeRampLength = 1;                   // samples for a full 0->1 ramp
     float monitorInGain = 0.0f;
     float bufferGain = 0.0f;
+
+    // Waveform thumbnail (double-buffered, published via thumbActive).
+    WaveformThumb thumbs[2];
+    std::atomic<int> thumbActive { 0 };
+    int64_t displayVersion = 0;               // bumped on every content/state change
+    int64_t computedVersion = -1;             // last version the thumb was computed from
+    int64_t blockCounter = 0;
 };

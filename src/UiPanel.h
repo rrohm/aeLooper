@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "LooperEngine.h"
+#include <array>
+#include <cstring>
 #include <functional>
 
 /**
@@ -74,11 +76,29 @@ private:
             repaint();
         }
 
+        /** Copy in the channel's waveform thumbnail (call from the message
+            thread; the engine-side buffer may be recycled at any time). */
+        void setWaveform(const float* minV, const float* maxV, int columns, bool isRedo)
+        {
+            waveColumns = juce::jmin(columns, (int) waveMin.size());
+            if (waveColumns > 0)
+            {
+                std::memcpy(waveMin.data(), minV, (size_t) waveColumns * sizeof(float));
+                std::memcpy(waveMax.data(), maxV, (size_t) waveColumns * sizeof(float));
+            }
+            waveIsRedo = isRedo;
+            repaint();
+        }
+
         void paint(juce::Graphics& g) override;
 
         static constexpr float cornerRadius = 6.0f;  // matches TextButton (LookAndFeel_V4)
         juce::String text;
         juce::Font font { juce::FontOptions().withHeight(14.0f) };
+        std::array<float, 256> waveMin {};
+        std::array<float, 256> waveMax {};
+        int waveColumns = 0;
+        bool waveIsRedo = false;
     };
 
     /**

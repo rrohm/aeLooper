@@ -6,6 +6,29 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xff23262c));
     g.fillRoundedRectangle(bounds, cornerRadius);
+
+    // Waveform of the loop content as background (dimmed when it is the
+    // undone/redoable layer rather than what is currently heard).
+    if (waveColumns > 0)
+    {
+        auto waveColour = juce::Colour(0xff4a6fa5);
+        if (waveIsRedo)
+            waveColour = waveColour.withAlpha(0.45f);
+
+        g.setColour(waveColour);
+
+        const float midY = bounds.getCentreY();
+        const float halfH = juce::jmax(1.0f, bounds.getHeight() * 0.5f - 2.0f);
+
+        for (int c = 0; c < waveColumns; ++c)
+        {
+            const float x = bounds.getX() + (c + 0.5f) * bounds.getWidth() / (float) waveColumns;
+            const float y1 = midY - waveMax[(size_t) c] * halfH;
+            const float y2 = midY - waveMin[(size_t) c] * halfH;
+            g.drawLine(x, y1, x, juce::jmax(y1 + 1.0f, y2), 1.0f);
+        }
+    }
+
     g.setColour(juce::Colours::darkgrey);
     g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 
@@ -399,6 +422,13 @@ void UiPanel::timerCallback()
         const auto state = channel.getState();
 
         strip->stateLabel.setText(stateText(state, channel.getUndoDepth()));
+
+        // Waveform background: current content, or the redoable layer (dimmed)
+        // when the channel is empty.
+        const auto& thumb = channel.getDisplayThumb();
+        const bool showRedo = state == LoopState::empty && channel.getRedoDepth() > 0;
+        strip->stateLabel.setWaveform(thumb.minV.data(), thumb.maxV.data(),
+                                      thumb.validColumns, showRedo);
 
         strip->recordButton.setButtonText(
             state == LoopState::empty ? "Record"

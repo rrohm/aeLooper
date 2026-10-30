@@ -139,6 +139,81 @@ void LooperChannel::finishBlock()
 {
     outputLevel.store(blockPeak, std::memory_order_relaxed);
     blockPeak = 0.0f;
+
+    updateThumbnailIfNeeded();
+}
+
+void LooperChannel::updateThumbnailIfNeeded()
+{
+    const auto st = state.load(std::memory_order_relaxed);
+    const bool mutating = st == LoopState::recording || st == LoopState::overdubbing;
+
+    if (mutating)
+        ++displayVersion;
+
+    ++blockCounter;
+
+    // While mutating, recompute at most every 8th block; on state changes
+    // (undo/redo/finalize/clear/...) recompute immediately.
+    if (displayVersion != computedVersion && (! mutating || blockCounter % 8 == 0))
+    {
+        computedVersion = displayVersion;
+        computeDisplayThumb();
+    }
+}
+
+void LooperChannel::computeThumb(const juce::AudioBuffer<float>& source, WaveformThumb& thumb)
+{
+    constexpr int cols = WaveformThumb::columns;
+    const int n = source.getNumSamples();
+
+    thumb.validColumns = 0;
+
+    if (n <= 0 || source.getNumChannels() <= 0)
+        return;
+
+    const int numCh = juce::jmin(source.getNumChannels(), 2);
+
+    for (int c = 0; c < cols; ++c)
+    {
+        const int start = (int) ((int64_t) c * n / cols);
+        const int end = (int) ((int64_t) (c + 1) * n / cols);
+        const int region = juce::jmax(1, end - start);
+        // Read at most ~32 samples per column: bounded cost even for very
+        // long loops (<= cols * 32 reads total).
+        const int step = juce::jmax(1, region / 32);
+
+        float mn = 0.0f, mx = 0.0f;
+        bool first = true;
+
+        for (int i = start; i < end; i += step)
+        {
+            float v = source.getSample(0, i);
+            if (numCh > 1)
+                v = (v + source.getSample(1, i)) * 0.5f;
+
+            if (first) { mn = mx = v; first = false; }
+            else { mn = juce::jmin(mn, v); mx = juce::jmax(mx, v); }
+        }
+
+        thumb.minV[(size_t) c] = mn;
+        thumb.maxV[(size_t) c] = mx;
+    }
+
+    thumb.validColumns = cols;
+}
+
+void LooperChannel::computeDisplayThumb()
+{
+    // When the channel is empty but something is redoable, show the undone
+    // layer's waveform so the user sees there is still content to restore.
+    const bool showRedo = state.load(std::memory_order_relaxed) == LoopState::empty
+                          && ! redoStack.empty();
+    const auto& source = showRedo ? redoStack.back().content : buffer;
+
+    const int inactive = 1 - thumbActive.load(std::memory_order_relaxed);
+    computeThumb(source, thumbs[(size_t) inactive]);
+    thumbActive.store(inactive, std::memory_order_release);
 }
 
 void LooperChannel::checkArmedStart(int64_t absolutePosition)
@@ -160,6 +235,7 @@ void LooperChannel::conformToLoopLength(int64_t loopLength)
     recordLength = loopLength;
     pendingStopBoundary = -1;
     setState(LoopState::playing);
+    ++displayVersion;
 }
 
 void LooperChannel::finalizeTake(int64_t takeLength)
@@ -173,6 +249,7 @@ void LooperChannel::finalizeTake(int64_t takeLength)
     // Undoing the base take returns to an empty channel.
     pushUndo(juce::AudioBuffer<float>(), LoopState::empty);
     setState(LoopState::playing);
+    ++displayVersion;
 }
 
 bool LooperChannel::finishQuantizedStop(int64_t& loopLengthInOut, int64_t latencySamples)
@@ -324,6 +401,7 @@ void LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                 pendingStopBoundary = -1;
                 armedStartPos = -1;
                 setState(LoopState::empty);
+                ++displayVersion;
                 break;
 
             case Command::play:
@@ -349,6 +427,8 @@ void LooperChannel::applySnapshot(const UndoEntry& entry)
         recordLength = 0;
         buffer.setSize(2, 0);
     }
+
+    ++displayVersion;
 }
 
 void LooperChannel::pushRedoSnapshot()

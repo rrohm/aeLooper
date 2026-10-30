@@ -24,6 +24,15 @@ One codebase builds both a standalone application and a VST3 plugin.
 - **Per-channel undo.** Before each overdub a snapshot of the accumulated
   buffer is pushed on that channel's undo stack; undo pops it. The first take
   pushes an "empty" snapshot, so undo also removes the base take.
+- **Waveform in the state label**: each strip's state field shows the loop's
+  waveform as a background (256-column min/max thumbnail). When the last
+  layer was undone (channel empty but redo stack non-empty), the undone
+  layer's waveform is still shown, dimmed, so it's visible that there is
+  something to redo. The thumbnail is computed on the audio thread with a
+  per-column read cap (bounded cost even for long loops), recomputed on
+  state changes and at most every 8th block while recording/overdubbing,
+  and published double-buffered via an atomic index - the UI just copies
+  2 KB per channel at its 20 Hz tick.
 - **Per-channel undo AND redo** (two snapshot stacks): "record" pushes a new
   layer, "undo" moves it to the redo stack without deleting it, "redo" puts
   it back; a new overdub on that channel clears its redo stack. Undo/redo are
