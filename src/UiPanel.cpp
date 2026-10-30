@@ -16,6 +16,12 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     };
     addAndMakeVisible(quantizeButton);
 
+    metronomeButton.onClick = [this]
+    {
+        engine.setMetronomeEnabled(metronomeButton.getToggleState());
+    };
+    addAndMakeVisible(metronomeButton);
+
     bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     bpmSlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 22);
     bpmSlider.setRange(30.0, 300.0, 0.1);
@@ -104,7 +110,9 @@ void UiPanel::resized()
     beatLed.setBounds(controls.removeFromRight(30).withSizeKeepingCentre(24, 24));
     quantizeButton.setBounds(controls.removeFromLeft(150));
     controls.removeFromLeft(10);
-    bpmSlider.setBounds(controls.removeFromLeft(230));
+    bpmSlider.setBounds(controls.removeFromLeft(210));
+    controls.removeFromLeft(10);
+    metronomeButton.setBounds(controls.removeFromLeft(110));
     controls.removeFromLeft(10);
     tempoSourceLabel.setBounds(controls);
 
@@ -183,7 +191,12 @@ void UiPanel::timerCallback()
         + (engine.hasHostTempo() ? "host" : "internal") + ")",
         juce::dontSendNotification);
 
-    // Beat LED: derive the flash phase from the engine's beat clock.
+    // Beat LED: only meaningful with bar quantization (otherwise the free
+    // loop's start wanders across the beat grid and the flashes would
+    // mislead). Visible only while quantization is on.
+    beatLed.setVisible(engine.isQuantizeEnabled());
+
+    if (beatLed.isVisible())
     {
         const double sr = engine.getSampleRate();
         const double beatLength = (60.0 / engine.getEffectiveBpm()) * sr;
@@ -200,6 +213,8 @@ void UiPanel::timerCallback()
         }
         beatLed.repaint();
     }
+
+    metronomeButton.setToggleState(engine.isMetronomeEnabled(), juce::dontSendNotification);
 
     inputMeter.setLevel(juce::jmax(engine.getInputLevel(), inputMeter.level * 0.85f));
     inputMeter.repaint();

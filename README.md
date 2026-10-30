@@ -35,9 +35,17 @@ One codebase builds both a standalone application and a VST3 plugin.
   exact multiple of one bar (4/4). The tempo comes from the host (VST3 in a
   DAW, via `AudioPlayHead`) or from the manual BPM slider when no host
   tempo is available (standalone). The **beat LED** in the controls row
-  flashes on each beat of that clock (accented on the downbeat) - with
-  quantization on it shows exactly when armed takes begin and where the
-  loop's bars are. A second record press cancels an armed take.
+  flashes on each beat of that clock (accented on the downbeat); it is only
+  visible while quantization is on, because in free-length mode the loop
+  start wanders across the beat grid and the flashes would mislead. A
+  second record press cancels an armed take.
+- **Metronome** ("Metronome" toggle): a click at each beat of the clock,
+  accented on the downbeat, mixed into the output regardless of channel
+  mutes. The clicks are synthesized (sine burst with exponential decay,
+  re-rendered for the current sample rate) rather than loaded from files;
+  if natural percussion sounds are wanted later, only the click-buffer
+  generation in `LooperEngine::prepare()` needs to change (e.g. BinaryData
+  WAVs).
 - **Clearing all channels frees the loop length**: when every channel is
   empty, the next recording defines a fresh loop length (and a fresh bar
   grid).

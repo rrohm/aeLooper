@@ -71,6 +71,7 @@ private:
     std::function<float()> outLevelProvider;
     juce::Label headerLabel;
     juce::ToggleButton quantizeButton { "Quantize to bars" };
+    juce::ToggleButton metronomeButton { "Metronome" };
     juce::Slider bpmSlider;
     juce::Label tempoSourceLabel;
     BeatLed beatLed;

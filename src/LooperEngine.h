@@ -42,6 +42,12 @@ public:
     double getBpm() const noexcept
     { return userBpm.load(std::memory_order_relaxed); }
 
+    /** Metronome click mixed into the output at each beat of the clock. */
+    void setMetronomeEnabled(bool enabled) noexcept
+    { metronomeEnabled.store(enabled, std::memory_order_relaxed); }
+    bool isMetronomeEnabled() const noexcept
+    { return metronomeEnabled.load(std::memory_order_relaxed); }
+
     // ---- audio thread (via PluginProcessor): host tempo ----
     void setHostTempo(double bpm) noexcept
     {
@@ -91,14 +97,27 @@ private:
     /** Length of one 4/4 bar in samples, or 0 when quantization is off. */
     int64_t currentBarLength() const noexcept;
 
+    /** Length of one beat in samples (always tempo-derived, >= 0). */
+    int64_t currentBeatLength() const noexcept;
+
+    /** Render one metronome click (sine burst with exponential decay). */
+    static void renderClick(juce::AudioBuffer<float>& click, double sampleRate,
+                            double frequency, float level);
+
     std::array<LooperChannel, maxChannels> channels { { { 0 }, { 1 }, { 2 }, { 3 } } };
     std::atomic<double> sampleRate { 48000.0 };
     std::atomic<int64_t> loopLength { -1 };   ///< -1 until the first take is finished
     std::atomic<int64_t> position { 0 };      ///< global transport position in samples
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
     std::atomic<bool> quantizeEnabled { false };
+    std::atomic<bool> metronomeEnabled { false };
     std::atomic<double> userBpm { 120.0 };
     std::atomic<double> hostBpm { 120.0 };
     std::atomic<bool> hostTempoValid { false };
     std::atomic<int64_t> beatClock { 0 };     ///< monotonic, never resets
+
+    juce::AudioBuffer<float> clickBeat;      ///< regular beat click
+    juce::AudioBuffer<float> clickAccent;    ///< downbeat click
+    int64_t clickOffset = -1;                ///< playhead into the active click, -1 = none
+    bool clickIsAccent = false;
 };

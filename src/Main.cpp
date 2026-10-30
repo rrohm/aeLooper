@@ -69,7 +69,7 @@ public:
                                    [proc = processor.get()] { return proc->getBusLevel(); }),
                         true);
         setResizable(true, false);
-        centreWithSize(720, 530);
+        centreWithSize(780, 530);
         setVisible(true);
     }
 

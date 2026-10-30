@@ -1,9 +1,35 @@
 #include "LooperEngine.h"
 #include <cmath>
 
+void LooperEngine::renderClick(juce::AudioBuffer<float>& click, double sr,
+                               double frequency, float level)
+{
+    // A short sine burst with exponential decay: the classic electronic
+    // metronome tick. A ~1 ms cosine onset ramp avoids a DC pop.
+    const int length = juce::jmax (1, (int) (0.05 * sr));   // 50 ms
+    click.setSize (2, length, false, true, true);
+
+    for (int i = 0; i < length; ++i)
+    {
+        const double t = (double) i / sr;
+        const double envelope = std::exp (-t * 60.0);
+        const double onset = juce::jlimit (0.0, 1.0, t / 0.001);
+        const double sample = std::sin (juce::MathConstants<double>::twoPi
+                                            * frequency * t)
+                                  * envelope * onset * level;
+        click.setSample (0, i, (float) sample);
+        click.setSample (1, i, (float) sample);
+    }
+}
+
 void LooperEngine::prepare(double newSampleRate)
 {
     sampleRate.store(newSampleRate, std::memory_order_relaxed);
+
+    // Re-render the metronome clicks for the new sample rate.
+    renderClick (clickBeat,   newSampleRate, 1500.0, 0.3f);
+    renderClick (clickAccent, newSampleRate, 2000.0, 0.4f);
+    clickOffset = -1;
 }
 
 void LooperEngine::pushCommand(int channelIndex, LooperChannel::Command command)
@@ -12,14 +38,19 @@ void LooperEngine::pushCommand(int channelIndex, LooperChannel::Command command)
         channels[(size_t) channelIndex].pushCommand(command);
 }
 
+int64_t LooperEngine::currentBeatLength() const noexcept
+{
+    const auto bpm = getEffectiveBpm();
+    const auto sr = sampleRate.load(std::memory_order_relaxed);
+    return bpm > 0.0 ? (int64_t) ((60.0 / bpm) * sr) : 0;
+}
+
 int64_t LooperEngine::currentBarLength() const noexcept
 {
     if (! quantizeEnabled.load(std::memory_order_relaxed))
         return 0;
 
-    const auto bpm = getEffectiveBpm();
-    const auto sr = sampleRate.load(std::memory_order_relaxed);
-    return (int64_t) ((60.0 / bpm) * beatsPerBar * sr);
+    return currentBeatLength() * (int64_t) beatsPerBar;
 }
 
 void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
@@ -104,6 +135,9 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     //    full scale.
     const bool lengthKnown = len > 0;
     const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
+    const bool metronomeOn = metronomeEnabled.load(std::memory_order_relaxed);
+    const int64_t beatLen = currentBeatLength();
+    const int64_t barLenSamples = beatLen * (int64_t) beatsPerBar;
     int64_t pos = position.load(std::memory_order_relaxed);
     int64_t beat = beatAtBlockStart;
     float inputPeak = 0.0f;
@@ -126,6 +160,29 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
             channel.processSample(inL, inR, l, r, posInLoop, len);
             outL += l;
             outR += r;
+        }
+
+        // Metronome: trigger a click at each beat of the clock, accented on
+        // the downbeat. The click state persists across blocks, so the tick
+        // is seamless at any block size.
+        if (metronomeOn && beatLen > 0 && (beat % beatLen) == 0)
+        {
+            clickOffset = 0;
+            clickIsAccent = (barLenSamples > 0 && (beat % barLenSamples) == 0);
+        }
+
+        if (clickOffset >= 0)
+        {
+            const auto& click = clickIsAccent ? clickAccent : clickBeat;
+
+            if (clickOffset < click.getNumSamples())
+            {
+                outL += click.getSample(0, (int) clickOffset);
+                outR += click.getSample(1, (int) clickOffset);
+            }
+
+            if (++clickOffset >= click.getNumSamples())
+                clickOffset = -1;
         }
 
         buffer.setSample(0, i, juce::jlimit(-1.0f, 1.0f, outL));
