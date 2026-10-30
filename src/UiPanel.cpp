@@ -53,6 +53,9 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     addAndMakeVisible(tempoSourceLabel);
     addAndMakeVisible(beatLed);
 
+    for (auto* toggle : { &quantizeButton, &metronomeButton, &countInButton })
+        toggle->setMouseCursor(juce::MouseCursor::PointingHandCursor);
+
     for (int i = 0; i < engine.getNumChannels(); ++i)
     {
         auto strip = std::make_unique<ChannelStrip>(i);
@@ -64,6 +67,17 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->clearButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::clear); };
 
         s->stateLabel.setJustificationType(juce::Justification::centredLeft);
+
+        // The state label is bordered like the buttons but dimmer, so it is
+        // clearly a passive display, not a clickable control.
+        s->stateLabel.setBorderSize(juce::BorderSize<int>(1));
+        s->stateLabel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff23262c));
+        s->stateLabel.setColour(juce::Label::outlineColourId, juce::Colours::darkgrey);
+        s->stateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+
+        // Hand cursor over the clickable controls.
+        for (auto* button : { &s->recordButton, &s->muteButton, &s->undoButton, &s->clearButton })
+            button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
 
         addAndMakeVisible(s->recordButton);
         addAndMakeVisible(s->muteButton);
@@ -145,16 +159,23 @@ void UiPanel::resized()
     {
         auto row = bounds.removeFromTop(rowHeight).reduced(2);
 
-        strip->recordButton.setBounds(row.removeFromLeft(juce::jmin(130, row.getWidth() / 5)));
-        row.removeFromLeft(6);
-        strip->muteButton.setBounds(row.removeFromLeft(juce::jmin(70, row.getWidth() / 5)));
-        row.removeFromLeft(6);
-        strip->undoButton.setBounds(row.removeFromLeft(juce::jmin(70, row.getWidth() / 5)));
-        row.removeFromLeft(6);
-        strip->clearButton.setBounds(row.removeFromLeft(juce::jmin(70, row.getWidth() / 5)));
-        row.removeFromLeft(10);
         strip->meter.setBounds(row.removeFromRight(14).withSizeKeepingCentre(10, row.getHeight()));
-        strip->stateLabel.setBounds(row);
+        row.removeFromRight(8);
+
+        // All four buttons share one equal width; the state label is 1.5x that.
+        constexpr int gap = 6;
+        const float buttonWidth = (float) (row.getWidth() - 4 * gap) / 5.5f;
+        const int labelWidth = (int) (buttonWidth * 1.5f);
+
+        strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(gap);
+        strip->muteButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(gap);
+        strip->undoButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(gap);
+        strip->clearButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(gap);
+        strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
     }
 }
 
