@@ -188,23 +188,25 @@ void UiPanel::resized()
         strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
     }
 
-    // Capture the initial geometry once, then scale the strip control fonts
-    // with the window size (both dimensions, so a wide-but-short window does
-    // not blow up the fonts), never below the original size.
+    // Capture the initial geometry once. The base font size is taken from the
+    // header controls, so the strips match them at startup; it is also the
+    // minimum font size.
     if (baseWidth <= 0 && getWidth() > 0)
     {
         baseWidth = getWidth();
         baseHeight = getHeight();
-        baseFontSize = getLookAndFeel().getTextButtonFont(strips.front()->recordButton,
-                                                          strips.front()->recordButton.getHeight()).getHeight();
+        baseFontSize = getLookAndFeel().getTextButtonFont(quantizeButton,
+                                                          quantizeButton.getHeight()).getHeight();
     }
 
     if (baseWidth > 0)
     {
-        const float scale = juce::jmax(1.0f,
-            juce::jmin((float) getWidth() / (float) baseWidth,
-                       (float) getHeight() / (float) baseHeight));
-        const float fontSize = baseFontSize * scale;
+        // Scale with both window dimensions, but subtly: the ratio above 1 is
+        // damped and capped, so the fonts return to the default at the original
+        // size, never go below it, and never get huge (max +20%).
+        const float sizeRatio = juce::jmin((float) getWidth() / (float) baseWidth,
+                                           (float) getHeight() / (float) baseHeight);
+        const float fontSize = baseFontSize * (1.0f + juce::jlimit(0.0f, 0.4f, sizeRatio - 1.0f) * 0.5f);
 
         stripLookAndFeel.fontSize = fontSize;
 

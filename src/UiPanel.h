@@ -101,14 +101,15 @@ private:
             return juce::Font(juce::FontOptions().withHeight(fontSize));
         }
 
-        float fontSize = 16.0f;   // JUCE default button font cap at the initial size
+        float fontSize = 16.0f;
     };
 
     StripLookAndFeel stripLookAndFeel;
 
-    // Initial geometry, captured on the first resized() call; strip control
-    // fonts scale with min(width, height) relative to it, never below the
-    // original font size.
+    // Initial geometry, captured on the first resized() call. baseFontSize is
+    // the font size of the header controls at startup: the strips match it at
+    // start, it is the minimum when shrinking, and they return to it when the
+    // window is back at about the original size. Growth is damped and capped.
     int baseWidth = 0;
     int baseHeight = 0;
     float baseFontSize = 0.0f;
