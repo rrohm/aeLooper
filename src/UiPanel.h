@@ -106,13 +106,19 @@ private:
 
     StripLookAndFeel stripLookAndFeel;
 
-    // Initial geometry, captured on the first resized() call. baseFontSize is
-    // the font size of the header controls at startup: the strips match it at
-    // start, it is the minimum when shrinking, and they return to it when the
-    // window is back at about the original size. Growth is damped and capped.
+    // Nominal design size of the panel, used as reference for font scaling
+    // (and as fallback if the first layout is degenerate).
+    static constexpr int designWidth = 1000;
+    static constexpr int designHeight = 530;
+
+    // Font size of the header controls at the design size (toggle-button font
+    // formula min(15, height*0.75) at the 34 px controls row). The strips start
+    // at this size; it is the minimum and the size they return to.
+    static constexpr float baseFontSizeNominal = 15.0f;
+
+    // Reference geometry, captured on the first sane resized() call.
     int baseWidth = 0;
     int baseHeight = 0;
-    float baseFontSize = 0.0f;
 
     juce::Label headerLabel;
     juce::ToggleButton quantizeButton { "Quantize to bars" };

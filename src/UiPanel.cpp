@@ -188,34 +188,32 @@ void UiPanel::resized()
         strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
     }
 
-    // Capture the initial geometry once. The base font size is taken from the
-    // header controls, so the strips match them at startup; it is also the
-    // minimum font size.
-    if (baseWidth <= 0 && getWidth() > 0)
+    // Capture the reference geometry once, but only from a sane layout - a
+    // degenerate first resize (tiny restored window, small host editor) must
+    // not poison the reference. The base font is a constant (the header
+    // controls' font at the design size), independent of runtime geometry.
+    if (baseWidth <= 0 && getWidth() >= 200 && getHeight() >= 200)
     {
         baseWidth = getWidth();
         baseHeight = getHeight();
-        // Same formula as LookAndFeel_V4::drawToggleButton, so the strips
-        // match the header controls at startup; this is also the minimum.
-        baseFontSize = juce::jmin(15.0f, (float) quantizeButton.getHeight() * 0.75f);
     }
 
-    if (baseWidth > 0)
-    {
-        // Scale with both window dimensions, but subtly: the ratio above 1 is
-        // damped and capped, so the fonts return to the default at the original
-        // size, never go below it, and never get huge (max +20%).
-        const float sizeRatio = juce::jmin((float) getWidth() / (float) baseWidth,
-                                           (float) getHeight() / (float) baseHeight);
-        const float fontSize = baseFontSize * (1.0f + juce::jlimit(0.0f, 0.4f, sizeRatio - 1.0f) * 0.5f);
+    const int refWidth = baseWidth > 0 ? baseWidth : designWidth;
+    const int refHeight = baseWidth > 0 ? baseHeight : designHeight;
 
-        stripLookAndFeel.fontSize = fontSize;
+    // Scale with both window dimensions, but subtly: the ratio above 1 is
+    // damped and capped, so the fonts return to the default at the original
+    // size, never go below it, and never get huge (max +20%).
+    const float sizeRatio = juce::jmin((float) getWidth() / (float) refWidth,
+                                       (float) getHeight() / (float) refHeight);
+    const float fontSize = baseFontSizeNominal * (1.0f + juce::jlimit(0.0f, 0.4f, sizeRatio - 1.0f) * 0.5f);
 
-        for (auto& strip : strips)
-            strip->stateLabel.setFontSize(fontSize);
+    stripLookAndFeel.fontSize = fontSize;
 
-        repaint();
-    }
+    for (auto& strip : strips)
+        strip->stateLabel.setFontSize(fontSize);
+
+    repaint();
 }
 
 void UiPanel::timerCallback()
