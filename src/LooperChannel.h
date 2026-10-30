@@ -52,7 +52,11 @@ public:
 
     // ---- audio thread (called by LooperEngine) ----
     /** Consume pending commands. Returns true if this channel finished the base take. */
-    bool consumeCommands(int64_t& loopLengthInOut);
+    bool consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples);
+
+    /** With bar quantization: finalize the take once the pending bar
+        boundary is reached. Returns true when it defined the loop length. */
+    bool finishQuantizedStop(int64_t& loopLengthInOut);
 
     /** Grow the take buffer so that a whole incoming block fits. */
     void prepareBlock(int numSamplesInBlock);
@@ -74,6 +78,10 @@ private:
         juce::AudioBuffer<float> content;
         LoopState stateAfterUndo;
     };
+
+    /** End the base take: truncate to takeLength, push the "empty" undo
+        snapshot (undo removes the base take) and switch to playing. */
+    void finalizeTake(int64_t takeLength);
 
     void pushUndo(const juce::AudioBuffer<float>& content, LoopState stateAfterUndo);
     void setState(LoopState newState) noexcept { state.store(newState, std::memory_order_relaxed); }
@@ -117,4 +125,5 @@ private:
     std::atomic<float> outputLevel { 0.0f };  // block peak for the meter
     float blockPeak = 0.0f;                    // audio-thread only
     int64_t recordLength = 0;                  // samples of the current base take
+    int64_t pendingStopBoundary = -1;         ///< quantized stop target (samples), -1 = none
 };

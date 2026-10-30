@@ -29,6 +29,18 @@ bool AeLooperAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) 
 void AeLooperAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                           juce::MidiBuffer& midiMessages)
 {
+    // Bar quantization: prefer the host tempo when one is provided
+    // (VST3 in a DAW). The standalone player's playhead carries no tempo,
+    // so the engine falls back to the user-set BPM.
+    if (auto* playHead = getPlayHead())
+        if (auto position = playHead->getPosition())
+        {
+            if (auto tempo = position->getBpm())
+                engine.setHostTempo(*tempo);
+            else
+                engine.clearHostTempo();
+        }
+
     midiController.process(midiMessages, engine);
     engine.processBlock(buffer);
 

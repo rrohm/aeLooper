@@ -54,6 +54,9 @@ private:
     LooperEngine& engine;
     std::function<float()> outLevelProvider;
     juce::Label headerLabel;
+    juce::ToggleButton quantizeButton { "Quantize to bars" };
+    juce::Slider bpmSlider;
+    juce::Label tempoSourceLabel;
     LevelMeter outMeter;   ///< final output bus level (left meter)
     LevelMeter inputMeter; ///< engine input level (right meter)
     std::vector<std::unique_ptr<ChannelStrip>> strips;

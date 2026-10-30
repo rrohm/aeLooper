@@ -12,20 +12,50 @@ void LooperEngine::pushCommand(int channelIndex, LooperChannel::Command command)
         channels[(size_t) channelIndex].pushCommand(command);
 }
 
+int64_t LooperEngine::currentBarLength() const noexcept
+{
+    if (! quantizeEnabled.load(std::memory_order_relaxed))
+        return 0;
+
+    const auto bpm = getEffectiveBpm();
+    const auto sr = sampleRate.load(std::memory_order_relaxed);
+    return (int64_t) ((60.0 / bpm) * beatsPerBar * sr);
+}
+
 void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
 {
     const int numSamples = buffer.getNumSamples();
 
     // 1. Consume pending commands. A channel finishing its base take
     //    defines the loop length for the whole engine (len changes from
-    //    -1 to the take length).
+    //    -1 to the take length). With bar quantization the stop is only
+    //    armed here; the take ends when the bar boundary is reached.
+    const int64_t barLen = currentBarLength();
     int64_t len = loopLength.load(std::memory_order_relaxed);
     const int64_t lenBefore = len;
-    bool lengthJustDefined = false;
 
     for (auto& channel : channels)
-        if (channel.consumeCommands(len))
-            lengthJustDefined = true;
+        channel.consumeCommands(len, barLen);
+
+    if (barLen > 0)
+        for (auto& channel : channels)
+            channel.finishQuantizedStop(len);
+
+    // All channels empty -> the session is fresh again: free the loop
+    // length so that the next recording defines a new one.
+    if (len > 0)
+    {
+        bool allEmpty = true;
+        for (auto& channel : channels)
+            if (channel.getState() != LoopState::empty)
+            {
+                allEmpty = false;
+                break;
+            }
+
+        if (allEmpty)
+            len = -1;
+    }
 
     if (len != lenBefore)
     {

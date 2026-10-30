@@ -99,10 +99,37 @@ void LooperChannel::conformToLoopLength(int64_t loopLength)
 {
     buffer.setSize(2, (int) loopLength, true, true, false);
     recordLength = loopLength;
+    pendingStopBoundary = -1;
     setState(LoopState::playing);
 }
 
-bool LooperChannel::consumeCommands(int64_t& loopLengthInOut)
+void LooperChannel::finalizeTake(int64_t takeLength)
+{
+    // Truncate (quantized takes may overshoot the boundary by up to one
+    // block) and switch to playing.
+    buffer.setSize(2, (int) takeLength, true, true, false);
+    recordLength = takeLength;
+    pendingStopBoundary = -1;
+
+    // Undoing the base take returns to an empty channel.
+    pushUndo(juce::AudioBuffer<float>(), LoopState::empty);
+    setState(LoopState::playing);
+}
+
+bool LooperChannel::finishQuantizedStop(int64_t& loopLengthInOut)
+{
+    if (state.load(std::memory_order_relaxed) != LoopState::recording
+        || pendingStopBoundary <= 0
+        || recordLength < pendingStopBoundary)
+        return false;
+
+    const int64_t boundary = pendingStopBoundary;
+    finalizeTake(boundary);
+    loopLengthInOut = boundary;
+    return true;
+}
+
+bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples)
 {
     bool definedLoopLength = false;
     Command cmd;
@@ -130,19 +157,25 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut)
                             undoDepth.store(0, std::memory_order_relaxed);
                             buffer.setSize(2, 0);
                             recordLength = 0;
+                            pendingStopBoundary = -1;
                             setState(LoopState::recording);
                         }
                         break;
 
                     case LoopState::recording:
-                        // Finishing the base take defines the loop length for
-                        // all channels.
-                        loopLengthInOut = recordLength;
-                        definedLoopLength = true;
-                        buffer.setSize(2, (int) recordLength, true, true, false);
-                        // Undoing the base take returns to an empty channel.
-                        pushUndo(juce::AudioBuffer<float>(), LoopState::empty);
-                        setState(LoopState::playing);
+                        if (barLengthInSamples > 0)
+                        {
+                            // Quantized stop: keep recording (and monitoring)
+                            // until the next bar boundary.
+                            pendingStopBoundary = ((recordLength + barLengthInSamples - 1)
+                                                   / barLengthInSamples) * barLengthInSamples;
+                        }
+                        else
+                        {
+                            finalizeTake(recordLength);
+                            loopLengthInOut = recordLength;
+                            definedLoopLength = true;
+                        }
                         break;
 
                     case LoopState::overdubbing:
@@ -185,6 +218,7 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut)
                 undoDepth.store(0, std::memory_order_relaxed);
                 buffer.setSize(2, 0);
                 recordLength = 0;
+                pendingStopBoundary = -1;
                 setState(LoopState::empty);
                 break;
 

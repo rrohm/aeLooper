@@ -28,8 +28,16 @@ One codebase builds both a standalone application and a VST3 plugin.
   | Clear          | 48       | 49   | 50   | 51   |
 
 - **Free loop length by default.** Length = exact sample count of the first
-  take. Bar-quantized recording (via `AudioPlayHead` tempo/transport) is a
-  planned extension and the command layer is where it would hook in.
+  take. Optionally, **bar quantization** can be enabled ("Quantize to bars"
+  toggle in the UI): stopping the first take is then quantized to the next
+  bar boundary, and the loop length becomes an exact multiple of one bar
+  (4/4). The tempo comes from the host (VST3 in a DAW, via `AudioPlayHead`)
+  or from the manual BPM slider when no host tempo is available (standalone).
+  The bar grid is anchored at the start of the first take; monitoring
+  continues until the boundary is reached.
+- **Clearing all channels frees the loop length**: when every channel is
+  empty, the next recording defines a fresh loop length (and a fresh bar
+  grid).
 
 ## Threading model
 
@@ -92,7 +100,11 @@ opens CMake projects natively.
 
 ## Roadmap
 
-- Bar-quantized first take via host tempo (`AudioPlayHead`), for the plugin.
+- ~~Bar-quantized first take via host tempo (`AudioPlayHead`)~~ - done.
+  Possible refinements: align the bar grid to the *host's* bar position
+  (currently anchored at the take's start), configurable time signature
+  (currently fixed 4/4), sample-accurate instead of block-accurate
+  finalization at the boundary.
 - Real-time-safe undo snapshots (preallocated buffers, no allocation on the
   audio thread).
 - Latency compensation: report/compensate input+output latency so recorded
@@ -102,3 +114,5 @@ opens CMake projects natively.
   fixed array in `LooperEngine` is the only place to change).
 - Persistence: save/load loops (e.g., per-channel wav, or a single session
   file) - `getStateInformation`/`setStateInformation` are stubs for now.
+- A headless engine test exists in `build/engine_test.cpp` (not installed by
+  CMake; compile it manually or move it into CTest later).

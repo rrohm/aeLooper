@@ -21,11 +21,45 @@ class LooperEngine
 {
 public:
     static constexpr int maxChannels = 4;
+    static constexpr double beatsPerBar = 4.0;  ///< 4/4 for now
 
     void prepare(double newSampleRate);
     void processBlock(juce::AudioBuffer<float>& buffer);
 
     void pushCommand(int channelIndex, LooperChannel::Command command);
+
+    // ---- UI thread: bar quantization settings ----
+    /** When enabled, stopping the first take is quantized to the next bar
+        boundary (4/4 at the effective tempo). The loop length is then an
+        exact multiple of one bar. */
+    void setQuantizeEnabled(bool shouldQuantize) noexcept
+    { quantizeEnabled.store(shouldQuantize, std::memory_order_relaxed); }
+    bool isQuantizeEnabled() const noexcept
+    { return quantizeEnabled.load(std::memory_order_relaxed); }
+
+    /** Fallback tempo when no host provides one. */
+    void setBpm(double bpm) noexcept { userBpm.store(bpm, std::memory_order_relaxed); }
+    double getBpm() const noexcept
+    { return userBpm.load(std::memory_order_relaxed); }
+
+    // ---- audio thread (via PluginProcessor): host tempo ----
+    void setHostTempo(double bpm) noexcept
+    {
+        hostBpm.store(bpm, std::memory_order_relaxed);
+        hostTempoValid.store(true, std::memory_order_relaxed);
+    }
+    void clearHostTempo() noexcept
+    { hostTempoValid.store(false, std::memory_order_relaxed); }
+    bool hasHostTempo() const noexcept
+    { return hostTempoValid.load(std::memory_order_relaxed); }
+    double getHostBpm() const noexcept
+    { return hostBpm.load(std::memory_order_relaxed); }
+
+    /** Host tempo if available, otherwise the user-set BPM. */
+    double getEffectiveBpm() const noexcept
+    {
+        return hasHostTempo() ? getHostBpm() : getBpm();
+    }
 
     // ---- UI thread access ----
     int getNumChannels() const noexcept { return maxChannels; }
@@ -43,9 +77,16 @@ public:
     double getSampleRate() const noexcept { return sampleRate.load(std::memory_order_relaxed); }
 
 private:
+    /** Length of one 4/4 bar in samples, or 0 when quantization is off. */
+    int64_t currentBarLength() const noexcept;
+
     std::array<LooperChannel, maxChannels> channels { { { 0 }, { 1 }, { 2 }, { 3 } } };
     std::atomic<double> sampleRate { 48000.0 };
     std::atomic<int64_t> loopLength { -1 };   ///< -1 until the first take is finished
     std::atomic<int64_t> position { 0 };      ///< global transport position in samples
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
+    std::atomic<bool> quantizeEnabled { false };
+    std::atomic<double> userBpm { 120.0 };
+    std::atomic<double> hostBpm { 120.0 };
+    std::atomic<bool> hostTempoValid { false };
 };

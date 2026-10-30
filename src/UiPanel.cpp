@@ -9,6 +9,24 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     addAndMakeVisible(inputMeter);
     addAndMakeVisible(outMeter);
 
+    // ---- bar quantization controls ----
+    quantizeButton.onClick = [this]
+    {
+        engine.setQuantizeEnabled(quantizeButton.getToggleState());
+    };
+    addAndMakeVisible(quantizeButton);
+
+    bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    bpmSlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 22);
+    bpmSlider.setRange(30.0, 300.0, 0.1);
+    bpmSlider.setValue(engine.getBpm(), juce::dontSendNotification);
+    bpmSlider.setTextValueSuffix(" BPM");
+    bpmSlider.onValueChange = [this] { engine.setBpm(bpmSlider.getValue()); };
+    addAndMakeVisible(bpmSlider);
+
+    tempoSourceLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(tempoSourceLabel);
+
     for (int i = 0; i < engine.getNumChannels(); ++i)
     {
         auto strip = std::make_unique<ChannelStrip>(i);
@@ -65,6 +83,13 @@ void UiPanel::resized()
     inputMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
     outMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
     headerLabel.setBounds(header);
+
+    auto controls = bounds.removeFromTop(34);
+    quantizeButton.setBounds(controls.removeFromLeft(150));
+    controls.removeFromLeft(10);
+    bpmSlider.setBounds(controls.removeFromLeft(230));
+    controls.removeFromLeft(10);
+    tempoSourceLabel.setBounds(controls);
 
     const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
 
@@ -133,6 +158,11 @@ void UiPanel::timerCallback()
                                          strip->meter.level * 0.85f));
         strip->meter.repaint();
     }
+
+    tempoSourceLabel.setText(
+        juce::String("tempo: ") + juce::String(engine.getEffectiveBpm(), 1) + " BPM ("
+        + (engine.hasHostTempo() ? "host" : "internal") + ")",
+        juce::dontSendNotification);
 
     inputMeter.setLevel(juce::jmax(engine.getInputLevel(), inputMeter.level * 0.85f));
     inputMeter.repaint();
