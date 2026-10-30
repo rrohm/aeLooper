@@ -19,19 +19,19 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
 
 void UiPanel::StatusBar::paint(juce::Graphics& g)
 {
+    const auto baseColour = juce::Colour(0xff2a3f5f);   // progress-bar blue as the base
+
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
 
-    // Same look as the state label: dimmed fill, rounded dimmed border.
     g.setColour(juce::Colour(0xff23262c));
     g.fillRoundedRectangle(bounds, 6.0f);
-    g.setColour(juce::Colours::darkgrey);
-    g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
-
-    auto inner = bounds.reduced((float) UiPanel::stripGap, 3.0f);
 
     if (info.quantized)
     {
-        // Bars x beats as border-only rounded boxes; the current beat is filled.
+        // Bars x beats as rounded boxes up to the border; the current beat is
+        // filled, downbeats get a brighter border than the other beats.
+        auto inner = bounds.reduced(1.0f, 1.0f);   // just inside the 1 px border
+
         const int n = juce::jmax(0, info.totalBoxes);
         if (n > 0 && inner.getWidth() > 0.0f)
         {
@@ -43,32 +43,43 @@ void UiPanel::StatusBar::paint(juce::Graphics& g)
             {
                 juce::Rectangle<float> box(inner.getX() + i * (boxW + boxGap),
                                            inner.getY(), boxW, boxH);
+                const bool isDownbeat = (i % info.beatsPerBar) == 0;
 
                 if (i == info.currentBox)
                 {
-                    g.setColour(juce::Colours::lightgrey);
+                    g.setColour(baseColour.withMultipliedBrightness(1.8f));
                     g.fillRoundedRectangle(box, 3.0f);
                 }
                 else
                 {
-                    g.setColour(juce::Colours::darkgrey);
+                    g.setColour(isDownbeat ? baseColour.withMultipliedBrightness(1.4f)
+                                           : baseColour.withMultipliedBrightness(0.7f));
                     g.drawRoundedRectangle(box, 3.0f, 1.0f);
                 }
             }
         }
+
+        g.setColour(baseColour.withMultipliedBrightness(0.7f));
+        g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
     }
     else
     {
-        // Progress bar showing the position within the loop, text on top.
+        // Progress fill runs right up to the border (no gap or padding).
         if (info.progress > 0.0)
         {
-            g.setColour(juce::Colour(0xff2a3f5f));
-            g.fillRoundedRectangle(inner.withWidth(inner.getWidth() * (float) info.progress), 3.0f);
+            g.setColour(baseColour);
+            g.fillRoundedRectangle(bounds.withWidth(bounds.getWidth() * (float) info.progress), 6.0f);
         }
 
+        g.setColour(baseColour.withMultipliedBrightness(0.7f));
+        g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
+
+        // Info text with a half-em left padding.
         g.setColour(juce::Colours::lightgrey);
         g.setFont(font);
-        g.drawFittedText(info.text, inner.toNearestInt(), juce::Justification::centredLeft, 1);
+        const float leftPad = font.getHeight() * 0.5f;
+        g.drawFittedText(info.text, bounds.reduced(leftPad, 0.0f).toNearestInt(),
+                         juce::Justification::centredLeft, 1);
     }
 }
 
@@ -360,9 +371,12 @@ void UiPanel::timerCallback()
 
         const int bars = barLenS > 0 ? (int) (lenSamples / barLenS) : 0;
         info.totalBoxes = bars * info.beatsPerBar;
+
+        // Box index = barIndex * beatsPerBar + beatIndexWithinBar.
+        const int64_t barIndex = barLenS > 0 ? posSamples / barLenS : 0;
+        const int64_t beatInBar = beatLenS > 0 ? (posSamples % barLenS) / beatLenS : 0;
         info.currentBox = juce::jlimit(0, juce::jmax(0, info.totalBoxes - 1),
-                                       (int) (posSamples / beatLenS
-                                              + (barLenS > 0 ? posSamples / barLenS : 0) * info.beatsPerBar));
+                                       (int) (barIndex * info.beatsPerBar + beatInBar));
     }
     else
     {
