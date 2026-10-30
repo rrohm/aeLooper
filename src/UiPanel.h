@@ -137,13 +137,10 @@ private:
     {
         explicit ChannelNumberField(int number) : channelNumber(number) {}
 
-        void setFontSize(float size) { stripFontSize = size; repaint(); }
-
         void paint(juce::Graphics& g) override;
 
         static constexpr float cornerRadius = StateLabel::cornerRadius;
         int channelNumber;
-        float stripFontSize = 15.0f;
     };
 
     struct ChannelStrip

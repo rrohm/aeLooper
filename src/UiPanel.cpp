@@ -249,18 +249,19 @@ void UiPanel::ChannelNumberField::paint(juce::Graphics& g)
     g.setColour(juce::Colours::darkgrey);
     g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 
-    // Oversized font: the digit is about twice the field width and clipped by
-    // the field (component painting is clipped to its bounds). The text area
-    // starts above the top edge, so the digit is clipped a little at the top.
-    const float bigFont = stripFontSize * 6.0f;
-    g.setFont(juce::Font(juce::FontOptions().withHeight(bigFont)));
+    // Fixed oversized font (at the default window size the field is ~24 px
+    // wide, so the ~48 px wide digit is about twice the field width). Drawn
+    // without fitting, so it is clipped by the field bounds on the sides;
+    // the baseline is placed so the glyph top sits a few px above the field.
+    constexpr float bigFontSize = 88.0f;
+    auto font = juce::Font(juce::FontOptions().withHeight(bigFontSize));
+    g.setFont(font);
     g.setColour(juce::Colours::lightgrey);
 
-    auto area = bounds;
-    area.setY(bounds.getY() - bigFont * 0.25f);
-    area.setHeight(bigFont);
-    g.drawFittedText(juce::String(channelNumber), area.toNearestInt(),
-                     juce::Justification::centred, 1);
+    const auto text = juce::String(channelNumber);
+    const float x = bounds.getCentreX() - font.getStringWidthFloat(text) * 0.5f;
+    const float baseline = bounds.getY() + font.getAscent() - 4.0f;
+    g.drawSingleLineText(text, (int) x, (int) baseline);
 }
 
 UiPanel::ChannelStrip::ChannelStrip(int index)
@@ -367,7 +368,6 @@ void UiPanel::resized()
         const int labelWidth = (int) (buttonWidth * 1.5f);
 
         strip->numberField.setBounds(row.removeFromLeft(numberFieldWidth));
-        strip->numberField.setFontSize(fontSize);
         row.removeFromLeft(stripGap);
         strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
         row.removeFromLeft(stripGap);
