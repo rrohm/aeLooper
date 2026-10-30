@@ -55,8 +55,10 @@ public:
     /** Grow the take buffer so that a whole incoming block fits. */
     void prepareBlock(int numSamplesInBlock);
 
-    /** Process one in/out sample pair in place at the given loop position. */
-    void processSample(juce::AudioBuffer<float>& io, int sampleIndex, int64_t positionInLoop, int64_t loopLength);
+    /** Produce this channel's output sample for the given loop position.
+        Never touches the shared bus; the engine sums the contributions. */
+    void processSample(float inL, float inR, float& outL, float& outR,
+                       int64_t positionInLoop, int64_t loopLength);
 
     /** Resize to the final loop length (called when another channel defined the length). */
     void conformToLoopLength(int64_t loopLength);

@@ -20,18 +20,15 @@ void LooperChannel::prepareBlock(int numSamplesInBlock)
                         true, false, false);
 }
 
-void LooperChannel::processSample(juce::AudioBuffer<float>& io, int i,
+void LooperChannel::processSample(float inL, float inR, float& outL, float& outR,
                                   int64_t positionInLoop, int64_t loopLength)
 {
-    const int ioChannels = juce::jmin(io.getNumChannels(), 2);
-    const float inL = io.getSample(0, i);
-    const float inR = ioChannels > 1 ? io.getSample(1, i) : inL;
+    outL = 0.0f;
+    outR = 0.0f;
 
     const auto st = state.load(std::memory_order_relaxed);
     const bool mute = muted.load(std::memory_order_relaxed);
     const int bufChannels = juce::jmin(buffer.getNumChannels(), 2);
-
-    float outL = 0.0f, outR = 0.0f;
 
     switch (st)
     {
@@ -87,10 +84,6 @@ void LooperChannel::processSample(juce::AudioBuffer<float>& io, int i,
         outL = 0.0f;
         outR = 0.0f;
     }
-
-    io.setSample(0, i, outL);
-    if (ioChannels > 1)
-        io.setSample(1, i, outR);
 }
 
 void LooperChannel::conformToLoopLength(int64_t loopLength)

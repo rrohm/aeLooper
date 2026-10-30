@@ -44,15 +44,35 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     for (auto& channel : channels)
         channel.prepareBlock(numSamples);
 
-    // 3. Transport and per-sample processing.
+    // 3. Transport and per-sample processing. The input is read once, every
+    //    channel produces a contribution, and the sum is written back. The
+    //    summed output is clamped so multiple active channels cannot exceed
+    //    full scale.
     const bool lengthKnown = len > 0;
+    const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
     int64_t pos = position.load(std::memory_order_relaxed);
 
     for (int i = 0; i < numSamples; ++i)
     {
         const int64_t posInLoop = lengthKnown ? (pos % len) : pos;
+
+        const float inL = buffer.getSample(0, i);
+        const float inR = bufferChannels > 1 ? buffer.getSample(1, i) : inL;
+
+        float outL = 0.0f;
+        float outR = 0.0f;
+
         for (auto& channel : channels)
-            channel.processSample(buffer, i, posInLoop, len);
+        {
+            float l = 0.0f, r = 0.0f;
+            channel.processSample(inL, inR, l, r, posInLoop, len);
+            outL += l;
+            outR += r;
+        }
+
+        buffer.setSample(0, i, juce::jlimit(-1.0f, 1.0f, outL));
+        if (bufferChannels > 1)
+            buffer.setSample(1, i, juce::jlimit(-1.0f, 1.0f, outR));
         ++pos;
     }
 
