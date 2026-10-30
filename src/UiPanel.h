@@ -54,6 +54,27 @@ private:
         bool accent = false;
     };
 
+    /**
+        Passive state display: a rounded, dimly bordered box with the same
+        corner radius as the buttons, text padded left by the strip gap.
+        Not clickable.
+    */
+    struct StateLabel : juce::Component
+    {
+        void setText(const juce::String& newText) { text = newText; repaint(); }
+        void setFontSize(float size)
+        {
+            font = juce::Font(juce::FontOptions().withHeight(size));
+            repaint();
+        }
+
+        void paint(juce::Graphics& g) override;
+
+        static constexpr float cornerRadius = 6.0f;  // matches TextButton (LookAndFeel_V4)
+        juce::String text;
+        juce::Font font { juce::FontOptions().withHeight(14.0f) };
+    };
+
     struct ChannelStrip
     {
         explicit ChannelStrip(int index);
@@ -62,13 +83,36 @@ private:
         juce::TextButton muteButton { "Mute" };   // color marks the state (see timerCallback)
         juce::TextButton undoButton { "Undo" };
         juce::TextButton clearButton { "Clear" };
-        juce::Label stateLabel;
+        StateLabel stateLabel;
         LevelMeter meter;
         int channelIndex;
     };
 
     LooperEngine& engine;
     std::function<float()> outLevelProvider;
+
+    static constexpr int stripGap = 6;   ///< horizontal gap between strip controls (also the label's left padding)
+
+    /** LookAndFeel for the strip buttons with a scalable font size. */
+    struct StripLookAndFeel : juce::LookAndFeel_V4
+    {
+        juce::Font getTextButtonFont(juce::TextButton&, int /*buttonHeight*/) override
+        {
+            return juce::Font(juce::FontOptions().withHeight(fontSize));
+        }
+
+        float fontSize = 16.0f;   // JUCE default button font cap at the initial size
+    };
+
+    StripLookAndFeel stripLookAndFeel;
+
+    // Initial geometry, captured on the first resized() call; strip control
+    // fonts scale with min(width, height) relative to it, never below the
+    // original font size.
+    int baseWidth = 0;
+    int baseHeight = 0;
+    float baseFontSize = 0.0f;
+
     juce::Label headerLabel;
     juce::ToggleButton quantizeButton { "Quantize to bars" };
     juce::ToggleButton metronomeButton { "Metronome" };

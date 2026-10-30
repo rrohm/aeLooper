@@ -1,5 +1,22 @@
 #include "UiPanel.h"
 
+void UiPanel::StateLabel::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+
+    g.setColour(juce::Colour(0xff23262c));
+    g.fillRoundedRectangle(bounds, cornerRadius);
+    g.setColour(juce::Colours::darkgrey);
+    g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+
+    g.setColour(juce::Colours::lightgrey);
+    g.setFont(font);
+
+    // Left padding equals the horizontal gap between the strip controls.
+    auto textArea = bounds.reduced((float) UiPanel::stripGap, 0.0f);
+    g.drawFittedText(text, textArea.toNearestInt(), juce::Justification::centredLeft, 1);
+}
+
 UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvider)
     : engine(engineToUse),
       outLevelProvider(std::move(outLevelProvider))
@@ -66,18 +83,12 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->undoButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::undo); };
         s->clearButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::clear); };
 
-        s->stateLabel.setJustificationType(juce::Justification::centredLeft);
-
-        // The state label is bordered like the buttons but dimmer, so it is
-        // clearly a passive display, not a clickable control.
-        s->stateLabel.setBorderSize(juce::BorderSize<int>(1));
-        s->stateLabel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff23262c));
-        s->stateLabel.setColour(juce::Label::outlineColourId, juce::Colours::darkgrey);
-        s->stateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-
         // Hand cursor over the clickable controls.
         for (auto* button : { &s->recordButton, &s->muteButton, &s->undoButton, &s->clearButton })
+        {
             button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
+            button->setLookAndFeel(&stripLookAndFeel);
+        }
 
         addAndMakeVisible(s->recordButton);
         addAndMakeVisible(s->muteButton);
@@ -163,19 +174,44 @@ void UiPanel::resized()
         row.removeFromRight(8);
 
         // All four buttons share one equal width; the state label is 1.5x that.
-        constexpr int gap = 6;
-        const float buttonWidth = (float) (row.getWidth() - 4 * gap) / 5.5f;
+        const float buttonWidth = (float) (row.getWidth() - 4 * stripGap) / 5.5f;
         const int labelWidth = (int) (buttonWidth * 1.5f);
 
         strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(gap);
+        row.removeFromLeft(stripGap);
         strip->muteButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(gap);
+        row.removeFromLeft(stripGap);
         strip->undoButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(gap);
+        row.removeFromLeft(stripGap);
         strip->clearButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(gap);
+        row.removeFromLeft(stripGap);
         strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
+    }
+
+    // Capture the initial geometry once, then scale the strip control fonts
+    // with the window size (both dimensions, so a wide-but-short window does
+    // not blow up the fonts), never below the original size.
+    if (baseWidth <= 0 && getWidth() > 0)
+    {
+        baseWidth = getWidth();
+        baseHeight = getHeight();
+        baseFontSize = getLookAndFeel().getTextButtonFont(strips.front()->recordButton,
+                                                          strips.front()->recordButton.getHeight()).getHeight();
+    }
+
+    if (baseWidth > 0)
+    {
+        const float scale = juce::jmax(1.0f,
+            juce::jmin((float) getWidth() / (float) baseWidth,
+                       (float) getHeight() / (float) baseHeight));
+        const float fontSize = baseFontSize * scale;
+
+        stripLookAndFeel.fontSize = fontSize;
+
+        for (auto& strip : strips)
+            strip->stateLabel.setFontSize(fontSize);
+
+        repaint();
     }
 }
 
@@ -212,7 +248,7 @@ void UiPanel::timerCallback()
         auto& channel = engine.getChannel(strip->channelIndex);
         const auto state = channel.getState();
 
-        strip->stateLabel.setText(stateText(state, channel.getUndoDepth()), juce::dontSendNotification);
+        strip->stateLabel.setText(stateText(state, channel.getUndoDepth()));
 
         strip->recordButton.setButtonText(
             state == LoopState::empty ? "Record"
