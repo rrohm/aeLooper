@@ -18,6 +18,9 @@ One codebase builds both a standalone application and a VST3 plugin.
 - **Per-channel undo.** Before each overdub a snapshot of the accumulated
   buffer is pushed on that channel's undo stack; undo pops it. The first take
   pushes an "empty" snapshot, so undo also removes the base take.
+- **Key commands** (work when the plugin/standalone window has focus):
+  `1`..`4` toggle record/overdub of the channel, `Alt+1..4` toggles mute,
+  `Shift+1..4` undoes the last overdub. Numpad digits work as well.
 - **MIDI remote control** (note-on messages, fixed mapping for now):
 
   | Function       | Ch 1     | Ch 2 | Ch 3 | Ch 4 |

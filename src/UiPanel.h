@@ -27,6 +27,11 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
+    /** Key commands: [1..4] toggle record of the channel, ALT+[1..4] toggles
+        mute, SHIFT+[1..4] undoes. Unhandled keys bubble up further. */
+    bool keyPressed(const juce::KeyPress&) override;
+    void parentHierarchyChanged() override;
+
 private:
     void timerCallback() override;
 

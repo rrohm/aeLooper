@@ -90,6 +90,12 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
             button->setLookAndFeel(&stripLookAndFeel);
         }
 
+        const auto keyName = juce::String(s->channelIndex + 1);
+        s->recordButton.setTooltip("Toggle record/overdub (key " + keyName + ")");
+        s->muteButton.setTooltip("Toggle mute (Alt+" + keyName + ")");
+        s->undoButton.setTooltip("Undo last overdub (Shift+" + keyName + ")");
+        s->clearButton.setTooltip("Clear channel");
+
         addAndMakeVisible(s->recordButton);
         addAndMakeVisible(s->muteButton);
         addAndMakeVisible(s->undoButton);
@@ -101,6 +107,48 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     }
 
     startTimerHz(20);
+
+    setWantsKeyboardFocus(true);
+}
+
+void UiPanel::parentHierarchyChanged()
+{
+    // Take keyboard focus when the panel is placed in a window, so the key
+    // commands work immediately. (Clicks on buttons move focus to them, but
+    // unhandled keys still bubble up to this panel.)
+    if (getParentComponent() != nullptr)
+        grabKeyboardFocus();
+}
+
+bool UiPanel::keyPressed(const juce::KeyPress& key)
+{
+    const int keyCode = key.getKeyCode();
+
+    // Accept the digit both from the main row and from the numpad.
+    int digit = 0;
+    if (keyCode >= '1' && keyCode <= '9')
+        digit = keyCode - '0';
+    else if (keyCode >= juce::KeyPress::numberPad0 && keyCode <= juce::KeyPress::numberPad9)
+        digit = keyCode - juce::KeyPress::numberPad0;
+
+    if (digit >= 1 && digit <= engine.getNumChannels())
+    {
+        const int channel = digit - 1;
+        const auto mods = key.getModifiers();
+
+        if (mods.isAltDown())
+            engine.pushCommand(channel, LooperChannel::Command::toggleMute);
+        else if (mods.isShiftDown())
+            engine.pushCommand(channel, LooperChannel::Command::undo);
+        else if (! mods.isCtrlDown() && ! mods.isCommandDown())
+            engine.pushCommand(channel, LooperChannel::Command::toggleRecord);
+        else
+            return false;
+
+        return true;
+    }
+
+    return false;
 }
 
 UiPanel::ChannelStrip::ChannelStrip(int index)
