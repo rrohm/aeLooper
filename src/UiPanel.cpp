@@ -206,7 +206,7 @@ void UiPanel::resized()
     // size, never go below it, and never get huge (max +20%).
     const float sizeRatio = juce::jmin((float) getWidth() / (float) refWidth,
                                        (float) getHeight() / (float) refHeight);
-    const float fontSize = baseFontSizeNominal * (1.0f + juce::jlimit(0.0f, 0.4f, sizeRatio - 1.0f) * 0.5f);
+    const float fontSize = baseFontSizeNominal * (1.0f + juce::jlimit(0.0f, 3.0f, sizeRatio - 1.0f) * 0.5f);
 
     stripLookAndFeel.fontSize = fontSize;
 
