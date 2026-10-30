@@ -24,6 +24,14 @@ public:
 private:
     void timerCallback() override;
 
+    /** Minimal peak meter, fed from the engine atomics by the timer. */
+    struct LevelMeter : juce::Component
+    {
+        void setLevel(float newLevel) noexcept { level = newLevel; }
+        void paint(juce::Graphics&) override;
+        float level = 0.0f;
+    };
+
     struct ChannelStrip
     {
         explicit ChannelStrip(int index);
@@ -33,11 +41,13 @@ private:
         juce::TextButton undoButton { "Undo" };
         juce::TextButton clearButton { "Clear" };
         juce::Label stateLabel;
+        LevelMeter meter;
         int channelIndex;
     };
 
     LooperEngine& engine;
     juce::Label headerLabel;
+    LevelMeter inputMeter;
     std::vector<std::unique_ptr<ChannelStrip>> strips;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UiPanel)

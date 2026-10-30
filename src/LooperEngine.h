@@ -34,6 +34,10 @@ public:
     bool isLoopLengthKnown() const noexcept
     { return loopLength.load(std::memory_order_relaxed) > 0; }
 
+    /** Peak level of the incoming signal (for the input meter). */
+    float getInputLevel() const noexcept
+    { return inputLevel.load(std::memory_order_relaxed); }
+
     double getLoopLengthSeconds() const noexcept;
     double getPositionSeconds() const noexcept;
     double getSampleRate() const noexcept { return sampleRate.load(std::memory_order_relaxed); }
@@ -43,4 +47,5 @@ private:
     std::atomic<double> sampleRate { 48000.0 };
     std::atomic<int64_t> loopLength { -1 };   ///< -1 until the first take is finished
     std::atomic<int64_t> position { 0 };      ///< global transport position in samples
+    std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
 };

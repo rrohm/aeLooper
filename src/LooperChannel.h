@@ -45,6 +45,8 @@ public:
     LoopState getState() const noexcept { return state.load(std::memory_order_relaxed); }
     bool isMuted() const noexcept { return muted.load(std::memory_order_relaxed); }
     int getUndoDepth() const noexcept { return undoDepth.load(std::memory_order_relaxed); }
+    /** Peak level of this channel's output contribution (for the meter). */
+    float getOutputLevel() const noexcept { return outputLevel.load(std::memory_order_relaxed); }
     void pushCommand(Command command) noexcept { commands.push(command); }
     double getContentSeconds(double sampleRate) const noexcept;
 
@@ -59,6 +61,9 @@ public:
         Never touches the shared bus; the engine sums the contributions. */
     void processSample(float inL, float inR, float& outL, float& outR,
                        int64_t positionInLoop, int64_t loopLength);
+
+    /** Publish the block peak to the outputLevel meter. */
+    void finishBlock();
 
     /** Resize to the final loop length (called when another channel defined the length). */
     void conformToLoopLength(int64_t loopLength);
@@ -109,5 +114,7 @@ private:
     std::atomic<LoopState> state { LoopState::empty };
     std::atomic<bool> muted { false };
     std::atomic<int> undoDepth { 0 };
+    std::atomic<float> outputLevel { 0.0f };  // block peak for the meter
+    float blockPeak = 0.0f;                    // audio-thread only
     int64_t recordLength = 0;                  // samples of the current base take
 };

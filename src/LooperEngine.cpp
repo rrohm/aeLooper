@@ -1,4 +1,5 @@
 #include "LooperEngine.h"
+#include <cmath>
 
 void LooperEngine::prepare(double newSampleRate)
 {
@@ -51,6 +52,7 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     const bool lengthKnown = len > 0;
     const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
     int64_t pos = position.load(std::memory_order_relaxed);
+    float inputPeak = 0.0f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -58,6 +60,7 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
 
         const float inL = buffer.getSample(0, i);
         const float inR = bufferChannels > 1 ? buffer.getSample(1, i) : inL;
+        inputPeak = juce::jmax(inputPeak, std::fabs(inL), std::fabs(inR));
 
         float outL = 0.0f;
         float outR = 0.0f;
@@ -75,6 +78,10 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
             buffer.setSample(1, i, juce::jlimit(-1.0f, 1.0f, outR));
         ++pos;
     }
+
+    inputLevel.store(inputPeak, std::memory_order_relaxed);
+    for (auto& channel : channels)
+        channel.finishBlock();
 
     position.store(pos, std::memory_order_relaxed);
 }

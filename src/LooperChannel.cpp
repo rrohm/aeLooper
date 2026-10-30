@@ -1,4 +1,5 @@
 #include "LooperChannel.h"
+#include <cmath>
 
 LooperChannel::LooperChannel(int channelIndex)
     : index(channelIndex)
@@ -84,6 +85,14 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
         outL = 0.0f;
         outR = 0.0f;
     }
+
+    blockPeak = juce::jmax(blockPeak, std::fabs(outL), std::fabs(outR));
+}
+
+void LooperChannel::finishBlock()
+{
+    outputLevel.store(blockPeak, std::memory_order_relaxed);
+    blockPeak = 0.0f;
 }
 
 void LooperChannel::conformToLoopLength(int64_t loopLength)
