@@ -59,7 +59,7 @@ private:
         explicit ChannelStrip(int index);
 
         juce::TextButton recordButton;
-        juce::ToggleButton muteButton { "Mute" };
+        juce::TextButton muteButton { "Mute" };   // color marks the state (see timerCallback)
         juce::TextButton undoButton { "Undo" };
         juce::TextButton clearButton { "Clear" };
         juce::Label stateLabel;

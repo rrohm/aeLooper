@@ -200,9 +200,24 @@ void UiPanel::timerCallback()
             : state == LoopState::overdubbing ? "Stop overdub"
             : "Overdub");
 
-        strip->muteButton.setToggleState(channel.isMuted(), juce::dontSendNotification);
-        strip->undoButton.setEnabled(channel.getUndoDepth() > 0);
+        // Mute is a plain TextButton; its colors mark the state:
+        // dimmed grey when not muted, subdued red when muted.
+        if (channel.isMuted())
+        {
+            strip->muteButton.setColour(juce::TextButton::buttonColourId,
+                                        juce::Colour(0xff8b2323));
+            strip->muteButton.setColour(juce::TextButton::textColourOffId,
+                                        juce::Colours::white);
+        }
+        else
+        {
+            strip->muteButton.setColour(juce::TextButton::buttonColourId,
+                                        juce::Colour(0xff2c2f36));
+            strip->muteButton.setColour(juce::TextButton::textColourOffId,
+                                        juce::Colours::grey);
+        }
 
+        strip->undoButton.setEnabled(channel.getUndoDepth() > 0);
         // peak hold with decay so short transients stay visible
         strip->meter.setLevel(juce::jmax(channel.getOutputLevel(),
                                          strip->meter.level * 0.85f));
