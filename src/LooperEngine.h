@@ -86,6 +86,14 @@ public:
     bool isAntiPlopEnabled() const noexcept
     { return antiPlopEnabled.load(std::memory_order_relaxed); }
 
+    /** Effective beats per bar (host time signature when available, else 4). */
+    int getBeatsPerBar() const noexcept
+    {
+        return hostGridValid.load(std::memory_order_relaxed)
+            ? hostNumerator.load(std::memory_order_relaxed)
+            : (int) beatsPerBar;
+    }
+
     // ---- host grid (audio thread, called by PluginProcessor) ----
     /**
         Feed the host transport position (in host samples, valid while the

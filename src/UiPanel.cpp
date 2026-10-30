@@ -17,14 +17,68 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
     g.drawFittedText(text, textArea.toNearestInt(), juce::Justification::centredLeft, 1);
 }
 
+void UiPanel::StatusBar::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+
+    // Same look as the state label: dimmed fill, rounded dimmed border.
+    g.setColour(juce::Colour(0xff23262c));
+    g.fillRoundedRectangle(bounds, 6.0f);
+    g.setColour(juce::Colours::darkgrey);
+    g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
+
+    auto inner = bounds.reduced((float) UiPanel::stripGap, 3.0f);
+
+    if (info.quantized)
+    {
+        // Bars x beats as border-only rounded boxes; the current beat is filled.
+        const int n = juce::jmax(0, info.totalBoxes);
+        if (n > 0 && inner.getWidth() > 0.0f)
+        {
+            constexpr float boxGap = 4.0f;
+            const float boxW = (inner.getWidth() - boxGap * (n - 1)) / (float) n;
+            const float boxH = inner.getHeight();
+
+            for (int i = 0; i < n; ++i)
+            {
+                juce::Rectangle<float> box(inner.getX() + i * (boxW + boxGap),
+                                           inner.getY(), boxW, boxH);
+
+                if (i == info.currentBox)
+                {
+                    g.setColour(juce::Colours::lightgrey);
+                    g.fillRoundedRectangle(box, 3.0f);
+                }
+                else
+                {
+                    g.setColour(juce::Colours::darkgrey);
+                    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+                }
+            }
+        }
+    }
+    else
+    {
+        // Progress bar showing the position within the loop, text on top.
+        if (info.progress > 0.0)
+        {
+            g.setColour(juce::Colour(0xff2a3f5f));
+            g.fillRoundedRectangle(inner.withWidth(inner.getWidth() * (float) info.progress), 3.0f);
+        }
+
+        g.setColour(juce::Colours::lightgrey);
+        g.setFont(font);
+        g.drawFittedText(info.text, inner.toNearestInt(), juce::Justification::centredLeft, 1);
+    }
+}
+
 UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvider)
     : engine(engineToUse),
       outLevelProvider(std::move(outLevelProvider))
 {
-    headerLabel.setJustificationType(juce::Justification::centredLeft);
-    addAndMakeVisible(headerLabel);
     addAndMakeVisible(inputMeter);
     addAndMakeVisible(outMeter);
+    addAndMakeVisible(statusBar);
 
     // ---- bar quantization controls ----
     quantizeButton.onClick = [this]
@@ -193,10 +247,9 @@ void UiPanel::resized()
 {
     auto bounds = getLocalBounds().reduced(8);
 
-    auto header = bounds.removeFromTop(28);
-    inputMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
-    outMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
-    headerLabel.setBounds(header);
+    auto topRow = bounds.removeFromTop(28);
+    inputMeter.setBounds(topRow.removeFromRight(14).withSizeKeepingCentre(10, 24));
+    outMeter.setBounds(topRow.removeFromRight(14).withSizeKeepingCentre(10, 24));
 
     auto controls = bounds.removeFromTop(34);
     beatLed.setBounds(controls.removeFromRight(30).withSizeKeepingCentre(24, 24));
@@ -211,6 +264,8 @@ void UiPanel::resized()
     latencySlider.setBounds(controls.removeFromLeft(170));
     controls.removeFromLeft(8);
     tempoSourceLabel.setBounds(controls);
+
+    statusBar.setBounds(bounds.removeFromBottom(32));
 
     const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
 
@@ -280,17 +335,44 @@ void UiPanel::timerCallback()
         return juce::String("unknown") + " (undo depth " + juce::String(undoDepth) + ")";
     };
 
+    // Status bar content (free mode: text + progress; quantize mode: beat boxes)
+    StatusBar::Info info;
+    info.quantized = engine.isQuantizeEnabled();
+    info.beatsPerBar = engine.getBeatsPerBar();
+
+    const double sr = engine.getSampleRate();
+    const double beatLen = (60.0 / engine.getEffectiveBpm()) * sr;
+    const double barLen = beatLen * info.beatsPerBar;
+
     if (engine.isLoopLengthKnown())
-        headerLabel.setText(juce::String("Loop length: ")
-                                + juce::String(engine.getLoopLengthSeconds(), 3)
-                                + " s    Position: "
-                                + juce::String(engine.getPositionSeconds(), 3)
-                                + " s    "
-                                + juce::String((int) engine.getSampleRate()) + " Hz",
-                            juce::dontSendNotification);
+    {
+        const double loopS = engine.getLoopLengthSeconds();
+        const double posS = engine.getPositionSeconds();
+
+        info.text = "Loop: " + juce::String(loopS, 3) + " s    pos: "
+                    + juce::String(posS, 3) + " s    " + juce::String((int) sr) + " Hz";
+        info.progress = loopS > 0.0 ? posS / loopS : 0.0;
+
+        const int64_t lenSamples = (int64_t) (loopS * sr + 0.5);
+        const int64_t posSamples = (int64_t) (posS * sr + 0.5);
+        const int64_t beatLenS = (int64_t) (beatLen + 0.5);
+        const int64_t barLenS = (int64_t) (barLen + 0.5);
+
+        const int bars = barLenS > 0 ? (int) (lenSamples / barLenS) : 0;
+        info.totalBoxes = bars * info.beatsPerBar;
+        info.currentBox = juce::jlimit(0, juce::jmax(0, info.totalBoxes - 1),
+                                       (int) (posSamples / beatLenS
+                                              + (barLenS > 0 ? posSamples / barLenS : 0) * info.beatsPerBar));
+    }
     else
-        headerLabel.setText("No loop yet - record the first take on any channel to set the loop length",
-                            juce::dontSendNotification);
+    {
+        info.text = "No loop yet - record the first take on any channel to set the loop length";
+        info.progress = 0.0;
+        info.totalBoxes = info.beatsPerBar;   // one empty bar while waiting
+        info.currentBox = -1;
+    }
+
+    statusBar.setState(info);
 
     for (auto& strip : strips)
     {

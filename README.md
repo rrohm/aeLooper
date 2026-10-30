@@ -7,6 +7,12 @@ One codebase builds both a standalone application and a VST3 plugin.
 
 ## Concept
 
+- **Status bar at the bottom of the window**: in free-running mode a rounded,
+  bordered bar (same look as the state labels) with a loop-position progress
+  fill and the textual loop info; with "Quantize to bars" enabled it shows
+  the loop as bars x beats-per-bar rounded boxes (border only), with the
+  current beat's box filled and the text hidden.
+
 - **4 parallel loop channels.** Each channel accumulates its audio in a single
   buffer (non-destructive overdub: input is added to the existing material).
 - **First take defines the global loop length.** While no length is known, a

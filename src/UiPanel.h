@@ -80,6 +80,32 @@ private:
         juce::Font font { juce::FontOptions().withHeight(14.0f) };
     };
 
+    /**
+        Status bar at the bottom of the window.
+        Free-running mode: rounded border (like the state label) with a
+        loop-position progress bar as background and the info text on top.
+        Quantize mode: bars x beatsPerBar rounded boxes, border only, with
+        the current beat's box filled; the text is hidden.
+    */
+    struct StatusBar : juce::Component
+    {
+        struct Info
+        {
+            juce::String text;
+            bool quantized = false;
+            double progress = 0.0;      ///< 0..1 position within the loop
+            int totalBoxes = 0;         ///< bars * beatsPerBar (quantize mode)
+            int currentBox = -1;        ///< filled box (quantize mode)
+            int beatsPerBar = 4;
+        };
+
+        void setState(const Info& newInfo) { info = newInfo; repaint(); }
+        void paint(juce::Graphics& g) override;
+
+        Info info;
+        juce::Font font { juce::FontOptions().withHeight(14.0f) };
+    };
+
     struct ChannelStrip
     {
         explicit ChannelStrip(int index);
@@ -125,7 +151,7 @@ private:
     int baseWidth = 0;
     int baseHeight = 0;
 
-    juce::Label headerLabel;
+    StatusBar statusBar;
     juce::ToggleButton quantizeButton { "Quantize to bars" };
     juce::ToggleButton metronomeButton { "Metronome" };
     juce::ToggleButton countInButton { "Count-in" };
