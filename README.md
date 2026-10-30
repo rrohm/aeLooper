@@ -45,7 +45,10 @@ One codebase builds both a standalone application and a VST3 plugin.
   re-rendered for the current sample rate) rather than loaded from files;
   if natural percussion sounds are wanted later, only the click-buffer
   generation in `LooperEngine::prepare()` needs to change (e.g. BinaryData
-  WAVs).
+  WAVs). With the **"Count-in"** checkbox, the metronome only clicks while
+  no loop exists and no take is running - including the armed phase - and
+  stops exactly at the bar boundary where recording begins; it starts again
+  once the last loop is cleared.
 - **Latency compensation** ("Latency" slider, in samples): recording writes
   are shifted earlier by the configured round-trip latency, and a stopped
   base take keeps recording that many samples past its nominal end before

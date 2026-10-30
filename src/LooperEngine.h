@@ -49,6 +49,17 @@ public:
     { return metronomeEnabled.load(std::memory_order_relaxed); }
 
     /**
+        Count-in mode: the metronome clicks only while no loop exists and no
+        take is running (i.e. before the first recording, including the armed
+        phase), and starts again once the last loop is cleared. When false,
+        the metronome runs permanently while enabled.
+    */
+    void setMetronomeCountInOnly(bool countInOnly) noexcept
+    { metronomeCountInOnly.store(countInOnly, std::memory_order_relaxed); }
+    bool isMetronomeCountInOnly() const noexcept
+    { return metronomeCountInOnly.load(std::memory_order_relaxed); }
+
+    /**
         Latency compensation: recording writes are shifted this many samples
         earlier, and a stopped base take keeps recording this many samples
         past its nominal end. Set it to the round-trip latency
@@ -155,6 +166,7 @@ private:
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
     std::atomic<bool> quantizeEnabled { false };
     std::atomic<bool> metronomeEnabled { false };
+    std::atomic<bool> metronomeCountInOnly { false };
     std::atomic<bool> antiPlopEnabled { true };
     std::atomic<int64_t> latencySamples { 0 };
     std::atomic<double> userBpm { 120.0 };

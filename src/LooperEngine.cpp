@@ -69,6 +69,7 @@ void LooperEngine::clearHostGrid()
 {
     hostGridValid.store(false, std::memory_order_relaxed);
     hostTransportRunning.store(false, std::memory_order_relaxed);
+    gridOffset.store(0, std::memory_order_relaxed);   // back to the internal grid
 }
 
 void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
@@ -181,7 +182,8 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     //    full scale.
     const bool lengthKnown = len > 0;
     const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
-    const bool metronomeOn = metronomeEnabled.load(std::memory_order_relaxed);
+    const bool metronomeMaster = metronomeEnabled.load(std::memory_order_relaxed);
+    const bool countInOnly = metronomeCountInOnly.load(std::memory_order_relaxed);
     const int64_t beatLen = currentBeatLength();
     const int numerator = hostGridValid.load(std::memory_order_relaxed)
         ? hostNumerator.load(std::memory_order_relaxed)
@@ -214,9 +216,27 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         // Metronome: trigger a click at each beat of the aligned grid,
         // accented on the downbeat. The click state persists across blocks,
         // so the tick is seamless at any block size.
+        // Count-in mode is evaluated per sample: an armed take can flip to
+        // recording mid-block, and the click must stop exactly at that bar.
+        bool metronomeActive = metronomeMaster;
+
+        if (metronomeActive && countInOnly)
+        {
+            bool anyRecording = false;
+            for (auto& channel : channels)
+                if (channel.getState() == LoopState::recording)
+                {
+                    anyRecording = true;
+                    break;
+                }
+
+            if (lengthKnown || anyRecording)
+                metronomeActive = false;
+        }
+
         const int64_t alignedBeat = beat + effectiveGridOffset;
 
-        if (metronomeOn && beatLen > 0 && loopMod(alignedBeat, beatLen) == 0)
+        if (metronomeActive && beatLen > 0 && loopMod(alignedBeat, beatLen) == 0)
         {
             clickOffset = 0;
             clickIsAccent = barLenSamples > 0 && loopMod(alignedBeat, barLenSamples) == 0;

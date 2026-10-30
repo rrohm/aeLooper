@@ -22,6 +22,13 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     };
     addAndMakeVisible(metronomeButton);
 
+    countInButton.onClick = [this]
+    {
+        engine.setMetronomeCountInOnly(countInButton.getToggleState());
+    };
+    countInButton.setTooltip("Metronome only before the first take (count-in), not permanently");
+    addAndMakeVisible(countInButton);
+
     bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     bpmSlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 22);
     bpmSlider.setRange(30.0, 300.0, 0.1);
@@ -125,6 +132,8 @@ void UiPanel::resized()
     bpmSlider.setBounds(controls.removeFromLeft(180));
     controls.removeFromLeft(8);
     metronomeButton.setBounds(controls.removeFromLeft(100));
+    controls.removeFromLeft(6);
+    countInButton.setBounds(controls.removeFromLeft(85));
     controls.removeFromLeft(8);
     latencySlider.setBounds(controls.removeFromLeft(170));
     controls.removeFromLeft(8);
@@ -229,6 +238,8 @@ void UiPanel::timerCallback()
     }
 
     metronomeButton.setToggleState(engine.isMetronomeEnabled(), juce::dontSendNotification);
+    countInButton.setToggleState(engine.isMetronomeCountInOnly(), juce::dontSendNotification);
+    countInButton.setEnabled(engine.isMetronomeEnabled());
 
     inputMeter.setLevel(juce::jmax(engine.getInputLevel(), inputMeter.level * 0.85f));
     inputMeter.repaint();

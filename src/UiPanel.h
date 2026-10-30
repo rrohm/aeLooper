@@ -72,6 +72,7 @@ private:
     juce::Label headerLabel;
     juce::ToggleButton quantizeButton { "Quantize to bars" };
     juce::ToggleButton metronomeButton { "Metronome" };
+    juce::ToggleButton countInButton { "Count-in" };
     juce::Slider bpmSlider;
     juce::Slider latencySlider;
     juce::Label tempoSourceLabel;
