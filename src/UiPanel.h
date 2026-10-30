@@ -38,6 +38,22 @@ private:
         float level = 0.0f;
     };
 
+    /**
+        LED that flashes on each beat of the engine's beat clock, accented on
+        the bar downbeat. Shows the grid that quantized takes snap to.
+    */
+    struct BeatLed : juce::Component
+    {
+        void setLevel(float newLevel, bool isAccent) noexcept
+        {
+            level = newLevel;
+            accent = isAccent;
+        }
+        void paint(juce::Graphics&) override;
+        float level = 0.0f;
+        bool accent = false;
+    };
+
     struct ChannelStrip
     {
         explicit ChannelStrip(int index);
@@ -57,6 +73,7 @@ private:
     juce::ToggleButton quantizeButton { "Quantize to bars" };
     juce::Slider bpmSlider;
     juce::Label tempoSourceLabel;
+    BeatLed beatLed;
     LevelMeter outMeter;   ///< final output bus level (left meter)
     LevelMeter inputMeter; ///< engine input level (right meter)
     std::vector<std::unique_ptr<ChannelStrip>> strips;

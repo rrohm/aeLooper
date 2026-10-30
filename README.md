@@ -29,12 +29,15 @@ One codebase builds both a standalone application and a VST3 plugin.
 
 - **Free loop length by default.** Length = exact sample count of the first
   take. Optionally, **bar quantization** can be enabled ("Quantize to bars"
-  toggle in the UI): stopping the first take is then quantized to the next
-  bar boundary, and the loop length becomes an exact multiple of one bar
-  (4/4). The tempo comes from the host (VST3 in a DAW, via `AudioPlayHead`)
-  or from the manual BPM slider when no host tempo is available (standalone).
-  The bar grid is anchored at the start of the first take; monitoring
-  continues until the boundary is reached.
+  toggle in the UI): the record press *arms* the take and it begins exactly
+  at the next bar boundary of the engine's free-running beat clock;
+  stopping is quantized to the next bar as well, so the loop length is an
+  exact multiple of one bar (4/4). The tempo comes from the host (VST3 in a
+  DAW, via `AudioPlayHead`) or from the manual BPM slider when no host
+  tempo is available (standalone). The **beat LED** in the controls row
+  flashes on each beat of that clock (accented on the downbeat) - with
+  quantization on it shows exactly when armed takes begin and where the
+  loop's bars are. A second record press cancels an armed take.
 - **Clearing all channels frees the loop length**: when every channel is
   empty, the next recording defines a fresh loop length (and a fresh bar
   grid).

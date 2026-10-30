@@ -16,7 +16,11 @@ double LooperChannel::getContentSeconds(double sampleRate) const noexcept
 
 void LooperChannel::prepareBlock(int numSamplesInBlock)
 {
-    if (state.load(std::memory_order_relaxed) == LoopState::recording)
+    const auto st = state.load(std::memory_order_relaxed);
+
+    // Armed channels are prepared too: the take can begin mid-block when the
+    // bar boundary is crossed, so the buffer must fit the rest of the block.
+    if (st == LoopState::recording || st == LoopState::armed)
         buffer.setSize(2, (int) recordLength + numSamplesInBlock,
                         true, false, false);
 }
@@ -76,6 +80,7 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
         }
 
         case LoopState::stopped:
+        case LoopState::armed:
         case LoopState::empty:
             break;
     }
@@ -93,6 +98,19 @@ void LooperChannel::finishBlock()
 {
     outputLevel.store(blockPeak, std::memory_order_relaxed);
     blockPeak = 0.0f;
+}
+
+void LooperChannel::checkArmedStart(int64_t absolutePosition)
+{
+    if (state.load(std::memory_order_relaxed) == LoopState::armed
+        && armedStartPos >= 0
+        && absolutePosition >= armedStartPos)
+    {
+        // The buffer was already grown by prepareBlock() for this block.
+        recordLength = 0;
+        pendingStopBoundary = -1;
+        setState(LoopState::recording);
+    }
 }
 
 void LooperChannel::conformToLoopLength(int64_t loopLength)
@@ -150,6 +168,15 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                             pushUndo(buffer, LoopState::playing);
                             setState(LoopState::overdubbing);
                         }
+                        else if (barLengthInSamples > 0)
+                        {
+                            // Base take with bar quantization: arm the start
+                            // at the next bar boundary (engine sets the
+                            // absolute target via armAt()).
+                            pendingStopBoundary = -1;
+                            armedStartPos = -1;
+                            setState(LoopState::armed);
+                        }
                         else
                         {
                             // First take on this channel: it defines the loop length.
@@ -160,6 +187,11 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                             pendingStopBoundary = -1;
                             setState(LoopState::recording);
                         }
+                        break;
+
+                    case LoopState::armed:
+                        // Second press cancels the pending quantized start.
+                        disarm();
                         break;
 
                     case LoopState::recording:
@@ -219,6 +251,7 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                 buffer.setSize(2, 0);
                 recordLength = 0;
                 pendingStopBoundary = -1;
+                armedStartPos = -1;
                 setState(LoopState::empty);
                 break;
 

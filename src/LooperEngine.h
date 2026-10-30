@@ -61,6 +61,17 @@ public:
         return hasHostTempo() ? getHostBpm() : getBpm();
     }
 
+    /**
+        Monotonic beat clock in samples, independent of the loop transport
+        (it never resets). The beat LED derives its phase from it:
+        beat flash when clock % beatLength == 0, bar accent when
+        clock % barLength == 0. With bar quantization enabled, armed base
+        takes start exactly on the next bar boundary of this clock, so the
+        LED and the loop grid always agree.
+    */
+    int64_t getBeatClock() const noexcept
+    { return beatClock.load(std::memory_order_relaxed); }
+
     // ---- UI thread access ----
     int getNumChannels() const noexcept { return maxChannels; }
     LooperChannel& getChannel(int i) { return channels[(size_t) i]; }
@@ -89,4 +100,5 @@ private:
     std::atomic<double> userBpm { 120.0 };
     std::atomic<double> hostBpm { 120.0 };
     std::atomic<bool> hostTempoValid { false };
+    std::atomic<int64_t> beatClock { 0 };     ///< monotonic, never resets
 };

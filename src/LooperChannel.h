@@ -10,6 +10,7 @@
 enum class LoopState
 {
     empty,          ///< no audio recorded yet
+    armed,          ///< base take armed: starts at the next bar boundary
     recording,      ///< recording the first take (defines the loop length)
     overdubbing,    ///< adding audio on top of the existing loop
     playing,        ///< playing back the accumulated loop content
@@ -69,6 +70,26 @@ public:
     /** Publish the block peak to the outputLevel meter. */
     void finishBlock();
 
+    /** Audio thread: set the engine beat-clock position at which an armed
+        base take shall begin. Only the first call while armed sticks; the
+        target must never move (otherwise the take could never start when
+        the boundary lands exactly on a block edge). */
+    void armAt(int64_t absolutePosition) noexcept
+    {
+        if (armedStartPos < 0)
+            armedStartPos = absolutePosition;
+    }
+
+    /** Audio thread: cancel an armed base-take start. */
+    void disarm() noexcept
+    {
+        armedStartPos = -1;
+        setState(LoopState::empty);
+    }
+
+    /** Audio thread: begin the armed take once the clock reaches the target. */
+    void checkArmedStart(int64_t absolutePosition);
+
     /** Resize to the final loop length (called when another channel defined the length). */
     void conformToLoopLength(int64_t loopLength);
 
@@ -126,4 +147,5 @@ private:
     float blockPeak = 0.0f;                    // audio-thread only
     int64_t recordLength = 0;                  // samples of the current base take
     int64_t pendingStopBoundary = -1;         ///< quantized stop target (samples), -1 = none
+    int64_t armedStartPos = -1;               ///< beat-clock position of an armed take start
 };

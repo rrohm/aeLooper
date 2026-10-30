@@ -37,6 +37,29 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     for (auto& channel : channels)
         channel.consumeCommands(len, barLen);
 
+    // Armed base takes: set the absolute start position on the beat clock.
+    // With quantization on, that is the next bar boundary, so the take
+    // begins sample-accurately on the LED's accented beat.
+    const int64_t beatAtBlockStart = beatClock.load(std::memory_order_relaxed);
+
+    for (auto& channel : channels)
+    {
+        if (channel.getState() != LoopState::armed)
+            continue;
+
+        if (len > 0)
+        {
+            // A loop already exists after all: no base take, cancel.
+            channel.disarm();
+        }
+        else
+        {
+            channel.armAt(barLen > 0
+                          ? ((beatAtBlockStart / barLen) + 1) * barLen
+                          : beatAtBlockStart); // quantize off -> start now
+        }
+    }
+
     if (barLen > 0)
         for (auto& channel : channels)
             channel.finishQuantizedStop(len);
@@ -82,6 +105,7 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     const bool lengthKnown = len > 0;
     const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
     int64_t pos = position.load(std::memory_order_relaxed);
+    int64_t beat = beatAtBlockStart;
     float inputPeak = 0.0f;
 
     for (int i = 0; i < numSamples; ++i)
@@ -98,6 +122,7 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         for (auto& channel : channels)
         {
             float l = 0.0f, r = 0.0f;
+            channel.checkArmedStart(beat);
             channel.processSample(inL, inR, l, r, posInLoop, len);
             outL += l;
             outR += r;
@@ -107,8 +132,10 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         if (bufferChannels > 1)
             buffer.setSample(1, i, juce::jlimit(-1.0f, 1.0f, outR));
         ++pos;
+        ++beat;
     }
 
+    beatClock.store(beat, std::memory_order_relaxed);
     inputLevel.store(inputPeak, std::memory_order_relaxed);
     for (auto& channel : channels)
         channel.finishBlock();
