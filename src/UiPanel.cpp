@@ -195,8 +195,9 @@ void UiPanel::resized()
     {
         baseWidth = getWidth();
         baseHeight = getHeight();
-        baseFontSize = getLookAndFeel().getTextButtonFont(quantizeButton,
-                                                          quantizeButton.getHeight()).getHeight();
+        // Same formula as LookAndFeel_V4::drawToggleButton, so the strips
+        // match the header controls at startup; this is also the minimum.
+        baseFontSize = juce::jmin(15.0f, (float) quantizeButton.getHeight() * 0.75f);
     }
 
     if (baseWidth > 0)
