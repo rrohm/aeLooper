@@ -420,12 +420,11 @@ void UiPanel::timerCallback()
 
         strip->stateLabel.setText(stateText(state, channel.getUndoDepth()));
 
-        // Waveform background: current content, or the redoable layer (dimmed)
-        // when the channel is empty.
+        // Waveform background: the redoable layer (dimmed) whenever the redo
+        // stack is non-empty, otherwise the current loop content.
         const auto& thumb = channel.getDisplayThumb();
-        const bool showRedo = state == LoopState::empty && channel.getRedoDepth() > 0;
         strip->stateLabel.setWaveform(thumb.minV.data(), thumb.maxV.data(),
-                                      thumb.validColumns, showRedo);
+                                      thumb.validColumns, channel.getRedoDepth() > 0);
 
         strip->recordButton.setButtonText(
             state == LoopState::empty ? "Record"

@@ -205,10 +205,9 @@ void LooperChannel::computeThumb(const juce::AudioBuffer<float>& source, Wavefor
 
 void LooperChannel::computeDisplayThumb()
 {
-    // When the channel is empty but something is redoable, show the undone
-    // layer's waveform so the user sees there is still content to restore.
-    const bool showRedo = state.load(std::memory_order_relaxed) == LoopState::empty
-                          && ! redoStack.empty();
+    // Whenever something is redoable, show the undone layer's waveform (the
+    // UI dims it), so the user sees per channel that content can be restored.
+    const bool showRedo = ! redoStack.empty();
     const auto& source = showRedo ? redoStack.back().content : buffer;
 
     const int inactive = 1 - thumbActive.load(std::memory_order_relaxed);
@@ -454,6 +453,7 @@ void LooperChannel::pushUndo(const juce::AudioBuffer<float>& content, LoopState 
     // A new layer invalidates the redo stack: undone content is forgotten.
     redoStack.clear();
     redoDepth.store(0, std::memory_order_relaxed);
+    ++displayVersion;   // the displayed waveform may switch back to the current buffer
 
     if ((int) undoStack.size() >= maxUndoDepth)
         undoStack.erase(undoStack.begin()); // bounded memory, oldest entry dropped
