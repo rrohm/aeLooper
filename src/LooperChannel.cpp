@@ -279,24 +279,46 @@ void LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                 break;
 
             case Command::undo:
-                if (! undoStack.empty())
+            {
+                const auto st = state.load(std::memory_order_relaxed);
+
+                // Undo only makes sense with content present and not while a
+                // take is being recorded.
+                if ((st == LoopState::playing || st == LoopState::overdubbing
+                     || st == LoopState::stopped)
+                    && ! undoStack.empty())
                 {
-                    auto& entry = undoStack.back();
-                    buffer = entry.content;
-                    setState(entry.stateAfterUndo);
-                    if (state.load(std::memory_order_relaxed) == LoopState::empty)
-                    {
-                        recordLength = 0;
-                        buffer.setSize(2, 0);
-                    }
+                    pushRedoSnapshot();
+                    applySnapshot(undoStack.back());
                     undoStack.pop_back();
                     undoDepth.store((int) undoStack.size(), std::memory_order_relaxed);
                 }
                 break;
+            }
+
+            case Command::redo:
+            {
+                const auto st = state.load(std::memory_order_relaxed);
+
+                // Redo also works from empty (redoing the base take after
+                // undoing it), but not while recording.
+                if ((st == LoopState::playing || st == LoopState::overdubbing
+                     || st == LoopState::stopped || st == LoopState::empty)
+                    && ! redoStack.empty())
+                {
+                    pushCurrentOntoUndo();
+                    applySnapshot(redoStack.back());
+                    redoStack.pop_back();
+                    redoDepth.store((int) redoStack.size(), std::memory_order_relaxed);
+                }
+                break;
+            }
 
             case Command::clear:
                 undoStack.clear();
+                redoStack.clear();
                 undoDepth.store(0, std::memory_order_relaxed);
+                redoDepth.store(0, std::memory_order_relaxed);
                 buffer.setSize(2, 0);
                 recordLength = 0;
                 pendingStopBoundary = -1;
@@ -317,8 +339,42 @@ void LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
     undoDepth.store((int) undoStack.size(), std::memory_order_relaxed);
 }
 
+void LooperChannel::applySnapshot(const UndoEntry& entry)
+{
+    buffer = entry.content;
+    setState(entry.stateAfterUndo);
+
+    if (state.load(std::memory_order_relaxed) == LoopState::empty)
+    {
+        recordLength = 0;
+        buffer.setSize(2, 0);
+    }
+}
+
+void LooperChannel::pushRedoSnapshot()
+{
+    if ((int) redoStack.size() >= maxUndoDepth)
+        redoStack.erase(redoStack.begin());
+
+    redoStack.push_back({ buffer, state.load(std::memory_order_relaxed) });
+    redoDepth.store((int) redoStack.size(), std::memory_order_relaxed);
+}
+
+void LooperChannel::pushCurrentOntoUndo()
+{
+    if ((int) undoStack.size() >= maxUndoDepth)
+        undoStack.erase(undoStack.begin());
+
+    undoStack.push_back({ buffer, state.load(std::memory_order_relaxed) });
+    undoDepth.store((int) undoStack.size(), std::memory_order_relaxed);
+}
+
 void LooperChannel::pushUndo(const juce::AudioBuffer<float>& content, LoopState stateAfterUndo)
 {
+    // A new layer invalidates the redo stack: undone content is forgotten.
+    redoStack.clear();
+    redoDepth.store(0, std::memory_order_relaxed);
+
     if ((int) undoStack.size() >= maxUndoDepth)
         undoStack.erase(undoStack.begin()); // bounded memory, oldest entry dropped
 

@@ -28,7 +28,8 @@ public:
     void resized() override;
 
     /** Key commands: [1..4] toggle record of the channel, ALT+[1..4] toggles
-        mute, SHIFT+[1..4] undoes. Unhandled keys bubble up further. */
+        mute, SHIFT+[1..4] undoes, CTRL+[1..4] redoes. Unhandled keys bubble
+        up further. */
     bool keyPressed(const juce::KeyPress&) override;
     void parentHierarchyChanged() override;
 
@@ -113,6 +114,7 @@ private:
         juce::TextButton recordButton;
         juce::TextButton muteButton { "Mute" };   // color marks the state (see timerCallback)
         juce::TextButton undoButton { "Undo" };
+        juce::TextButton redoButton { "Redo" };
         juce::TextButton clearButton { "Clear" };
         StateLabel stateLabel;
         LevelMeter meter;

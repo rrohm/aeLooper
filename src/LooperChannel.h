@@ -48,6 +48,7 @@ public:
         toggleRecord,   ///< empty -> record | record -> finish take | playing -> overdub | overdub -> stop
         toggleMute,
         undo,
+        redo,
         clear,
         play             ///< stopped -> playing
     };
@@ -60,6 +61,7 @@ public:
     LoopState getState() const noexcept { return state.load(std::memory_order_relaxed); }
     bool isMuted() const noexcept { return muted.load(std::memory_order_relaxed); }
     int getUndoDepth() const noexcept { return undoDepth.load(std::memory_order_relaxed); }
+    int getRedoDepth() const noexcept { return redoDepth.load(std::memory_order_relaxed); }
     /** Peak level of this channel's output contribution (for the meter). */
     float getOutputLevel() const noexcept { return outputLevel.load(std::memory_order_relaxed); }
     void pushCommand(Command command) noexcept { commands.push(command); }
@@ -129,6 +131,17 @@ private:
     void finalizeTake(int64_t takeLength);
 
     void pushUndo(const juce::AudioBuffer<float>& content, LoopState stateAfterUndo);
+
+    /** Apply a snapshot (from the undo or the redo stack). */
+    void applySnapshot(const UndoEntry& entry);
+
+    /** Push the current state onto the redo stack (called by undo). */
+    void pushRedoSnapshot();
+
+    /** Push the current state back onto the undo stack (called by redo;
+        does not clear the redo stack). */
+    void pushCurrentOntoUndo();
+
     void setState(LoopState newState) noexcept { state.store(newState, std::memory_order_relaxed); }
 
     // Minimal single-producer/single-consumer command FIFO.
@@ -162,11 +175,13 @@ private:
     const int index;
     juce::AudioBuffer<float> buffer;        // accumulated loop content
     std::vector<UndoEntry> undoStack;
+    std::vector<UndoEntry> redoStack;
     CommandFifo commands;
 
     std::atomic<LoopState> state { LoopState::empty };
     std::atomic<bool> muted { false };
     std::atomic<int> undoDepth { 0 };
+    std::atomic<int> redoDepth { 0 };
     std::atomic<float> outputLevel { 0.0f };  // block peak for the meter
     float blockPeak = 0.0f;                    // audio-thread only
     int64_t recordLength = 0;                  // samples of the current base take

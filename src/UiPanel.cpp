@@ -146,10 +146,11 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->recordButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::toggleRecord); };
         s->muteButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::toggleMute); };
         s->undoButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::undo); };
+        s->redoButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::redo); };
         s->clearButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::clear); };
 
         // Hand cursor over the clickable controls.
-        for (auto* button : { &s->recordButton, &s->muteButton, &s->undoButton, &s->clearButton })
+        for (auto* button : { &s->recordButton, &s->muteButton, &s->undoButton, &s->redoButton, &s->clearButton })
         {
             button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
             button->setLookAndFeel(&stripLookAndFeel);
@@ -159,11 +160,13 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->recordButton.setTooltip("Toggle record/overdub (key " + keyName + ")");
         s->muteButton.setTooltip("Toggle mute (Alt+" + keyName + ")");
         s->undoButton.setTooltip("Undo last overdub (Shift+" + keyName + ")");
+        s->redoButton.setTooltip("Redo (Ctrl+" + keyName + ")");
         s->clearButton.setTooltip("Clear channel");
 
         addAndMakeVisible(s->recordButton);
         addAndMakeVisible(s->muteButton);
         addAndMakeVisible(s->undoButton);
+        addAndMakeVisible(s->redoButton);
         addAndMakeVisible(s->clearButton);
         addAndMakeVisible(s->stateLabel);
         addAndMakeVisible(s->meter);
@@ -205,10 +208,10 @@ bool UiPanel::keyPressed(const juce::KeyPress& key)
             engine.pushCommand(channel, LooperChannel::Command::toggleMute);
         else if (mods.isShiftDown())
             engine.pushCommand(channel, LooperChannel::Command::undo);
-        else if (! mods.isCtrlDown() && ! mods.isCommandDown())
-            engine.pushCommand(channel, LooperChannel::Command::toggleRecord);
+        else if (mods.isCtrlDown() || mods.isCommandDown())
+            engine.pushCommand(channel, LooperChannel::Command::redo);
         else
-            return false;
+            engine.pushCommand(channel, LooperChannel::Command::toggleRecord);
 
         return true;
     }
@@ -287,8 +290,8 @@ void UiPanel::resized()
         strip->meter.setBounds(row.removeFromRight(14).withSizeKeepingCentre(10, row.getHeight()));
         row.removeFromRight(8);
 
-        // All four buttons share one equal width; the state label is 1.5x that.
-        const float buttonWidth = (float) (row.getWidth() - 4 * stripGap) / 5.5f;
+        // All five buttons share one equal width; the state label is 1.5x that.
+        const float buttonWidth = (float) (row.getWidth() - 5 * stripGap) / 6.5f;
         const int labelWidth = (int) (buttonWidth * 1.5f);
 
         strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
@@ -296,6 +299,8 @@ void UiPanel::resized()
         strip->muteButton.setBounds(row.removeFromLeft((int) buttonWidth));
         row.removeFromLeft(stripGap);
         strip->undoButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->redoButton.setBounds(row.removeFromLeft((int) buttonWidth));
         row.removeFromLeft(stripGap);
         strip->clearButton.setBounds(row.removeFromLeft((int) buttonWidth));
         row.removeFromLeft(stripGap);
@@ -420,6 +425,7 @@ void UiPanel::timerCallback()
         }
 
         strip->undoButton.setEnabled(channel.getUndoDepth() > 0);
+        strip->redoButton.setEnabled(channel.getRedoDepth() > 0);
         // peak hold with decay so short transients stay visible
         strip->meter.setLevel(juce::jmax(channel.getOutputLevel(),
                                          strip->meter.level * 0.85f));

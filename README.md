@@ -24,9 +24,15 @@ One codebase builds both a standalone application and a VST3 plugin.
 - **Per-channel undo.** Before each overdub a snapshot of the accumulated
   buffer is pushed on that channel's undo stack; undo pops it. The first take
   pushes an "empty" snapshot, so undo also removes the base take.
+- **Per-channel undo AND redo** (two snapshot stacks): "record" pushes a new
+  layer, "undo" moves it to the redo stack without deleting it, "redo" puts
+  it back; a new overdub on that channel clears its redo stack. Undo/redo are
+  ignored while a take is recording. Edge case handled: undoing the only
+  take frees the global loop length (clear-all rule), and a redo that
+  revives a channel restores the saved loop length.
 - **Key commands** (work when the plugin/standalone window has focus):
   `1`..`4` toggle record/overdub of the channel, `Alt+1..4` toggles mute,
-  `Shift+1..4` undoes the last overdub. Numpad digits work as well.
+  `Shift+1..4` undoes, `Ctrl+1..4` redoes. Numpad digits work as well.
 - **MIDI remote control** (note-on messages, fixed mapping for now):
 
   | Function       | Ch 1     | Ch 2 | Ch 3 | Ch 4 |

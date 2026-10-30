@@ -154,12 +154,33 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         loopLength.store(len, std::memory_order_relaxed);
         position.store(0, std::memory_order_relaxed);
 
+        if (len > 0)
+            savedLoopLength = len;
+
         // Every channel that had started recording a base take of its own
         // gets conformed (truncated / padded) to the new length; empty
         // channels stay empty and are resized lazily when they overdub.
         for (auto& channel : channels)
             if (channel.getState() == LoopState::recording)
                 channel.conformToLoopLength(len);
+    }
+
+    // Undo/redo can bring a channel back to playing/overdubbing after the
+    // loop length was freed (all channels empty): restore the saved length,
+    // otherwise playback would run without a loop length.
+    if (len <= 0 && savedLoopLength > 0)
+    {
+        for (auto& channel : channels)
+        {
+            const auto st = channel.getState();
+            if (st == LoopState::playing || st == LoopState::overdubbing)
+            {
+                len = savedLoopLength;
+                loopLength.store(len, std::memory_order_relaxed);
+                position.store(0, std::memory_order_relaxed);
+                break;
+            }
+        }
     }
 
     // 2. Let channels that are recording a base take grow their buffers so

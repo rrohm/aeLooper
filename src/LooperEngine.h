@@ -170,6 +170,7 @@ private:
     std::array<LooperChannel, maxChannels> channels { { { 0 }, { 1 }, { 2 }, { 3 } } };
     std::atomic<double> sampleRate { 48000.0 };
     std::atomic<int64_t> loopLength { -1 };   ///< -1 until the first take is finished
+    int64_t savedLoopLength = 0;              ///< remembered when freed, restored when a channel revives via undo/redo
     std::atomic<int64_t> position { 0 };      ///< global transport position in samples
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
     std::atomic<bool> quantizeEnabled { false };
