@@ -127,10 +127,30 @@ private:
         juce::Font font { juce::FontOptions().withHeight(14.0f) };
     };
 
+    /**
+        First field of a strip: status-label look (same fill and rounded
+        border), width approx. a checkbox, showing the channel number in an
+        oversized font that is clipped by the field on the sides and a bit at
+        the top.
+    */
+    struct ChannelNumberField : juce::Component
+    {
+        explicit ChannelNumberField(int number) : channelNumber(number) {}
+
+        void setFontSize(float size) { stripFontSize = size; repaint(); }
+
+        void paint(juce::Graphics& g) override;
+
+        static constexpr float cornerRadius = StateLabel::cornerRadius;
+        int channelNumber;
+        float stripFontSize = 15.0f;
+    };
+
     struct ChannelStrip
     {
         explicit ChannelStrip(int index);
 
+        ChannelNumberField numberField;
         juce::TextButton recordButton;
         juce::TextButton muteButton { "Mute" };   // color marks the state (see timerCallback)
         juce::TextButton undoButton { "Undo" };

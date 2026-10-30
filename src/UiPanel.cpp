@@ -183,6 +183,7 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->redoButton.setTooltip("Redo (Ctrl+" + keyName + ")");
         s->clearButton.setTooltip("Clear channel");
 
+        addAndMakeVisible(s->numberField);
         addAndMakeVisible(s->recordButton);
         addAndMakeVisible(s->muteButton);
         addAndMakeVisible(s->undoButton);
@@ -239,8 +240,32 @@ bool UiPanel::keyPressed(const juce::KeyPress& key)
     return false;
 }
 
+void UiPanel::ChannelNumberField::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+
+    g.setColour(juce::Colour(0xff23262c));
+    g.fillRoundedRectangle(bounds, cornerRadius);
+    g.setColour(juce::Colours::darkgrey);
+    g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+
+    // Oversized font: the digit is about twice the field width and clipped by
+    // the field (component painting is clipped to its bounds). The text area
+    // starts above the top edge, so the digit is clipped a little at the top.
+    const float bigFont = stripFontSize * 6.0f;
+    g.setFont(juce::Font(juce::FontOptions().withHeight(bigFont)));
+    g.setColour(juce::Colours::lightgrey);
+
+    auto area = bounds;
+    area.setY(bounds.getY() - bigFont * 0.25f);
+    area.setHeight(bigFont);
+    g.drawFittedText(juce::String(channelNumber), area.toNearestInt(),
+                     juce::Justification::centred, 1);
+}
+
 UiPanel::ChannelStrip::ChannelStrip(int index)
-    : channelIndex(index)
+    : numberField(index + 1),
+      channelIndex(index)
 {
 }
 
@@ -300,36 +325,11 @@ void UiPanel::resized()
     tempoSourceLabel.setBounds(controls);
 
     statusBar.setBounds(bounds.removeFromBottom(32));
+    bounds.removeFromBottom(8);   // gap between lowest strip and status bar = window margin
 
-    const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
-
-    for (auto& strip : strips)
-    {
-        auto row = bounds.removeFromTop(rowHeight).reduced(2);
-
-        strip->meter.setBounds(row.removeFromRight(14).withSizeKeepingCentre(10, row.getHeight()));
-        row.removeFromRight(8);
-
-        // All five buttons share one equal width; the state label is 1.5x that.
-        const float buttonWidth = (float) (row.getWidth() - 5 * stripGap) / 6.5f;
-        const int labelWidth = (int) (buttonWidth * 1.5f);
-
-        strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(stripGap);
-        strip->muteButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(stripGap);
-        strip->undoButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(stripGap);
-        strip->redoButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(stripGap);
-        strip->clearButton.setBounds(row.removeFromLeft((int) buttonWidth));
-        row.removeFromLeft(stripGap);
-        strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
-    }
-
-    // Capture the reference geometry once, but only from a sane layout - a
-    // degenerate first resize (tiny restored window, small host editor) must
-    // not poison the reference. The base font is a constant (the header
+    // Font scaling must be known before the strip layout (the number field's
+    // width follows the strip font size). The reference geometry is captured
+    // once, only from a sane layout; the base font is a constant (the header
     // controls' font at the design size), independent of runtime geometry.
     if (baseWidth <= 0 && getWidth() >= 200 && getHeight() >= 200)
     {
@@ -345,12 +345,44 @@ void UiPanel::resized()
     // size, never go below it, and never get huge (max +20%).
     const float sizeRatio = juce::jmin((float) getWidth() / (float) refWidth,
                                        (float) getHeight() / (float) refHeight);
-    const float fontSize = baseFontSizeNominal * (1.0f + juce::jlimit(0.0f, 3.0f, sizeRatio - 1.0f) * 0.5f);
+    const float fontSize = baseFontSizeNominal * (1.0f + juce::jlimit(0.0f, 0.4f, sizeRatio - 1.0f) * 0.5f);
 
     stripLookAndFeel.fontSize = fontSize;
 
+    // Number field width: approx. the width of a checkbox (toggle tick box).
+    const int numberFieldWidth = (int) (fontSize * 1.1f) + 8;
+
+    const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
+
     for (auto& strip : strips)
+    {
+        auto row = bounds.removeFromTop(rowHeight).reduced(2);
+
+        strip->meter.setBounds(row.removeFromRight(14).withSizeKeepingCentre(10, row.getHeight()));
+        row.removeFromRight(8);
+
+        // Number field, then five equally wide buttons, then the state label
+        // at 1.5x button width.
+        const float buttonWidth = (float) (row.getWidth() - numberFieldWidth - 6 * stripGap) / 6.5f;
+        const int labelWidth = (int) (buttonWidth * 1.5f);
+
+        strip->numberField.setBounds(row.removeFromLeft(numberFieldWidth));
+        strip->numberField.setFontSize(fontSize);
+        row.removeFromLeft(stripGap);
+        strip->recordButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->muteButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->undoButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->redoButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->clearButton.setBounds(row.removeFromLeft((int) buttonWidth));
+        row.removeFromLeft(stripGap);
+        strip->stateLabel.setBounds(row.removeFromLeft(labelWidth));
+
         strip->stateLabel.setFontSize(fontSize);
+    }
 
     repaint();
 }
