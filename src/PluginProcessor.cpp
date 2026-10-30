@@ -31,15 +31,32 @@ void AeLooperAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
     // Bar quantization: prefer the host tempo when one is provided
     // (VST3 in a DAW). The standalone player's playhead carries no tempo,
-    // so the engine falls back to the user-set BPM.
+    // so the engine falls back to the user-set BPM. The host transport
+    // position (when running) aligns the engine's bar grid to the host's
+    // bars; time signature and transport state come with it.
     if (auto* playHead = getPlayHead())
+    {
         if (auto position = playHead->getPosition())
         {
             if (auto tempo = position->getBpm())
                 engine.setHostTempo(*tempo);
             else
                 engine.clearHostTempo();
+
+            if (auto hostTime = position->getTimeInSamples())
+            {
+                int numerator = 4;
+                if (auto signature = position->getTimeSignature())
+                    numerator = juce::jmax(1, signature->numerator);
+
+                engine.updateHostGrid(*hostTime, numerator, position->getIsPlaying());
+            }
+            else
+            {
+                engine.clearHostGrid();
+            }
         }
+    }
 
     midiController.process(midiMessages, engine);
     engine.processBlock(buffer);

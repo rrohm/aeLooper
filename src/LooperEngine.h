@@ -48,6 +48,38 @@ public:
     bool isMetronomeEnabled() const noexcept
     { return metronomeEnabled.load(std::memory_order_relaxed); }
 
+    /**
+        Latency compensation: recording writes are shifted this many samples
+        earlier, and a stopped base take keeps recording this many samples
+        past its nominal end. Set it to the round-trip latency
+        (input + output) of the audio system; the standalone initialises it
+        from the audio device, the plugin exposes a manual slider.
+    */
+    void setLatency(int64_t samples) noexcept
+    {
+        latencySamples.store(juce::jlimit((int64_t) 0, (int64_t) 65536, samples),
+                             std::memory_order_relaxed);
+    }
+    int64_t getLatency() const noexcept
+    { return latencySamples.load(std::memory_order_relaxed); }
+
+    // ---- host grid (audio thread, called by PluginProcessor) ----
+    /**
+        Feed the host transport position (in host samples, valid while the
+        transport is running) and its time signature numerator. The engine
+        aligns its bar grid (armed take starts, metronome accents, beat LED)
+        to the host's bars while the transport runs; without a host, or when
+        stopped, the last known offset is kept (initially 0 = internal grid).
+    */
+    void updateHostGrid(int64_t hostTimeInSamples, int numerator, bool transportRunning);
+    /** No playhead information available at all (e.g. no host). */
+    void clearHostGrid();
+
+    /** Offset (host samples - engine samples) of the aligned beat grid.
+        Used by the UI for the beat LED phase. */
+    int64_t getGridOffset() const noexcept
+    { return gridOffset.load(std::memory_order_relaxed); }
+
     // ---- audio thread (via PluginProcessor): host tempo ----
     void setHostTempo(double bpm) noexcept
     {
@@ -111,10 +143,17 @@ private:
     std::atomic<float> inputLevel { 0.0f };   ///< block peak of the input
     std::atomic<bool> quantizeEnabled { false };
     std::atomic<bool> metronomeEnabled { false };
+    std::atomic<int64_t> latencySamples { 0 };
     std::atomic<double> userBpm { 120.0 };
     std::atomic<double> hostBpm { 120.0 };
     std::atomic<bool> hostTempoValid { false };
     std::atomic<int64_t> beatClock { 0 };     ///< monotonic, never resets
+
+    std::atomic<int64_t> hostTimeAtBlock { 0 };
+    std::atomic<int> hostNumerator { 4 };
+    std::atomic<bool> hostGridValid { false };
+    std::atomic<bool> hostTransportRunning { false };
+    std::atomic<int64_t> gridOffset { 0 };   ///< last host-engine grid offset
 
     juce::AudioBuffer<float> clickBeat;      ///< regular beat click
     juce::AudioBuffer<float> clickAccent;    ///< downbeat click

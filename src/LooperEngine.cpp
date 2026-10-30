@@ -50,7 +50,25 @@ int64_t LooperEngine::currentBarLength() const noexcept
     if (! quantizeEnabled.load(std::memory_order_relaxed))
         return 0;
 
-    return currentBeatLength() * (int64_t) beatsPerBar;
+    const int numerator = hostGridValid.load(std::memory_order_relaxed)
+        ? hostNumerator.load(std::memory_order_relaxed)
+        : (int) beatsPerBar;
+    return currentBeatLength() * numerator;
+}
+
+void LooperEngine::updateHostGrid(int64_t hostTimeInSamples, int numerator,
+                                  bool transportRunning)
+{
+    hostTimeAtBlock.store(hostTimeInSamples, std::memory_order_relaxed);
+    hostNumerator.store(juce::jmax(1, numerator), std::memory_order_relaxed);
+    hostGridValid.store(true, std::memory_order_relaxed);
+    hostTransportRunning.store(transportRunning, std::memory_order_relaxed);
+}
+
+void LooperEngine::clearHostGrid()
+{
+    hostGridValid.store(false, std::memory_order_relaxed);
+    hostTransportRunning.store(false, std::memory_order_relaxed);
 }
 
 void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
@@ -69,9 +87,22 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         channel.consumeCommands(len, barLen);
 
     // Armed base takes: set the absolute start position on the beat clock.
-    // With quantization on, that is the next bar boundary, so the take
-    // begins sample-accurately on the LED's accented beat.
+    // With quantization on, that is the next bar boundary of the *aligned*
+    // grid (host bars while the transport runs, internal grid otherwise),
+    // so the take begins sample-accurately on the LED's accented beat.
     const int64_t beatAtBlockStart = beatClock.load(std::memory_order_relaxed);
+
+    int64_t effectiveGridOffset;
+    if (hostGridValid.load(std::memory_order_relaxed)
+        && hostTransportRunning.load(std::memory_order_relaxed))
+    {
+        effectiveGridOffset = hostTimeAtBlock.load(std::memory_order_relaxed) - beatAtBlockStart;
+        gridOffset.store(effectiveGridOffset, std::memory_order_relaxed);
+    }
+    else
+    {
+        effectiveGridOffset = gridOffset.load(std::memory_order_relaxed);
+    }
 
     for (auto& channel : channels)
     {
@@ -83,17 +114,23 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
             // A loop already exists after all: no base take, cancel.
             channel.disarm();
         }
+        else if (barLen > 0)
+        {
+            const int64_t alignedNow = beatAtBlockStart + effectiveGridOffset;
+            channel.armAt(nextGridBoundary(alignedNow, barLen) - effectiveGridOffset);
+        }
         else
         {
-            channel.armAt(barLen > 0
-                          ? ((beatAtBlockStart / barLen) + 1) * barLen
-                          : beatAtBlockStart); // quantize off -> start now
+            channel.armAt(beatAtBlockStart); // quantize off -> start now
         }
     }
 
-    if (barLen > 0)
-        for (auto& channel : channels)
-            channel.finishQuantizedStop(len);
+    // Finalize stopped base takes (bar-quantized and free alike), once the
+    // latency extension has been recorded.
+    const int64_t latency = latencySamples.load(std::memory_order_relaxed);
+
+    for (auto& channel : channels)
+        channel.finishQuantizedStop(len, latency);
 
     // All channels empty -> the session is fresh again: free the loop
     // length so that the next recording defines a new one.
@@ -137,7 +174,10 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
     const int bufferChannels = juce::jmin(buffer.getNumChannels(), 2);
     const bool metronomeOn = metronomeEnabled.load(std::memory_order_relaxed);
     const int64_t beatLen = currentBeatLength();
-    const int64_t barLenSamples = beatLen * (int64_t) beatsPerBar;
+    const int numerator = hostGridValid.load(std::memory_order_relaxed)
+        ? hostNumerator.load(std::memory_order_relaxed)
+        : (int) beatsPerBar;
+    const int64_t barLenSamples = beatLen * numerator;
     int64_t pos = position.load(std::memory_order_relaxed);
     int64_t beat = beatAtBlockStart;
     float inputPeak = 0.0f;
@@ -157,18 +197,20 @@ void LooperEngine::processBlock(juce::AudioBuffer<float>& buffer)
         {
             float l = 0.0f, r = 0.0f;
             channel.checkArmedStart(beat);
-            channel.processSample(inL, inR, l, r, posInLoop, len);
+            channel.processSample(inL, inR, l, r, posInLoop, len, latency);
             outL += l;
             outR += r;
         }
 
-        // Metronome: trigger a click at each beat of the clock, accented on
-        // the downbeat. The click state persists across blocks, so the tick
-        // is seamless at any block size.
-        if (metronomeOn && beatLen > 0 && (beat % beatLen) == 0)
+        // Metronome: trigger a click at each beat of the aligned grid,
+        // accented on the downbeat. The click state persists across blocks,
+        // so the tick is seamless at any block size.
+        const int64_t alignedBeat = beat + effectiveGridOffset;
+
+        if (metronomeOn && beatLen > 0 && loopMod(alignedBeat, beatLen) == 0)
         {
             clickOffset = 0;
-            clickIsAccent = (barLenSamples > 0 && (beat % barLenSamples) == 0);
+            clickIsAccent = barLenSamples > 0 && loopMod(alignedBeat, barLenSamples) == 0;
         }
 
         if (clickOffset >= 0)

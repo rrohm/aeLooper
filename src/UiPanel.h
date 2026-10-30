@@ -73,6 +73,7 @@ private:
     juce::ToggleButton quantizeButton { "Quantize to bars" };
     juce::ToggleButton metronomeButton { "Metronome" };
     juce::Slider bpmSlider;
+    juce::Slider latencySlider;
     juce::Label tempoSourceLabel;
     BeatLed beatLed;
     LevelMeter outMeter;   ///< final output bus level (left meter)

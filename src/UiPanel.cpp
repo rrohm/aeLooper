@@ -30,6 +30,18 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     bpmSlider.onValueChange = [this] { engine.setBpm(bpmSlider.getValue()); };
     addAndMakeVisible(bpmSlider);
 
+    latencySlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    latencySlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 22);
+    latencySlider.setRange(0.0, 8192.0, 1.0);
+    latencySlider.setValue((double) engine.getLatency(), juce::dontSendNotification);
+    latencySlider.setTextValueSuffix(" smp");
+    latencySlider.onValueChange = [this]
+    {
+        engine.setLatency((int64_t) latencySlider.getValue());
+    };
+    latencySlider.setTooltip("Round-trip latency compensation (samples)");
+    addAndMakeVisible(latencySlider);
+
     tempoSourceLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(tempoSourceLabel);
     addAndMakeVisible(beatLed);
@@ -108,12 +120,14 @@ void UiPanel::resized()
 
     auto controls = bounds.removeFromTop(34);
     beatLed.setBounds(controls.removeFromRight(30).withSizeKeepingCentre(24, 24));
-    quantizeButton.setBounds(controls.removeFromLeft(150));
-    controls.removeFromLeft(10);
-    bpmSlider.setBounds(controls.removeFromLeft(210));
-    controls.removeFromLeft(10);
-    metronomeButton.setBounds(controls.removeFromLeft(110));
-    controls.removeFromLeft(10);
+    quantizeButton.setBounds(controls.removeFromLeft(140));
+    controls.removeFromLeft(8);
+    bpmSlider.setBounds(controls.removeFromLeft(180));
+    controls.removeFromLeft(8);
+    metronomeButton.setBounds(controls.removeFromLeft(100));
+    controls.removeFromLeft(8);
+    latencySlider.setBounds(controls.removeFromLeft(170));
+    controls.removeFromLeft(8);
     tempoSourceLabel.setBounds(controls);
 
     const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
@@ -200,13 +214,13 @@ void UiPanel::timerCallback()
     {
         const double sr = engine.getSampleRate();
         const double beatLength = (60.0 / engine.getEffectiveBpm()) * sr;
+        const int64_t clock = engine.getBeatClock() + engine.getGridOffset();
         const int64_t barLength = (int64_t) (beatLength * 4.0);
-        const int64_t clock = engine.getBeatClock();
 
         if (beatLength > 1.0 && sr > 0.0)
         {
-            const auto sinceBeat = (int64_t) ((int64_t) clock % (int64_t) beatLength);
-            const auto sinceBar = (int64_t) ((int64_t) clock % barLength);
+            const auto sinceBeat = loopMod(clock, (int64_t) beatLength);
+            const auto sinceBar = loopMod(clock, barLength);
             const double msSinceBeat = (double) sinceBeat / sr * 1000.0;
             const float level = (float) juce::jlimit(0.0, 1.0, 1.0 - msSinceBeat / 150.0);
             beatLed.setLevel(level, sinceBar < (int64_t) beatLength);

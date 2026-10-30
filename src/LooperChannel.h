@@ -17,6 +17,20 @@ enum class LoopState
     stopped         ///< has content, but currently silent
 };
 
+/** Arithmetic modulo that also works for negative values. */
+inline int64_t loopMod (int64_t value, int64_t length) noexcept
+{
+    const auto r = value % length;
+    return r >= 0 ? r : r + length;
+}
+
+/** Next multiple of `length` strictly after `position` (also for negative
+    positions, e.g. on a host-aligned grid). */
+inline int64_t nextGridBoundary (int64_t position, int64_t length) noexcept
+{
+    return position + (length - loopMod (position, length));
+}
+
 /**
     One loop channel: an audio buffer with the accumulated loop content, an
     undo stack of previous buffer snapshots, and a mute flag.
@@ -52,20 +66,25 @@ public:
     double getContentSeconds(double sampleRate) const noexcept;
 
     // ---- audio thread (called by LooperEngine) ----
-    /** Consume pending commands. Returns true if this channel finished the base take. */
-    bool consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples);
+    /** Consume pending commands. The stop of a base take only arms the
+        pendingStopBoundary; the take is finalized by finishQuantizedStop()
+        once latency compensation is satisfied. */
+    void consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples);
 
-    /** With bar quantization: finalize the take once the pending bar
-        boundary is reached. Returns true when it defined the loop length. */
-    bool finishQuantizedStop(int64_t& loopLengthInOut);
+    /** Finalize a stopped base take: recording continues until
+        (pendingStopBoundary + latencySamples) so in-flight material lands
+        inside the loop. Returns true when it defined the loop length. */
+    bool finishQuantizedStop(int64_t& loopLengthInOut, int64_t latencySamples);
 
     /** Grow the take buffer so that a whole incoming block fits. */
     void prepareBlock(int numSamplesInBlock);
 
     /** Produce this channel's output sample for the given loop position.
-        Never touches the shared bus; the engine sums the contributions. */
+        Never touches the shared bus; the engine sums the contributions.
+        latencySamples shifts the write position earlier (compensation). */
     void processSample(float inL, float inR, float& outL, float& outR,
-                       int64_t positionInLoop, int64_t loopLength);
+                       int64_t positionInLoop, int64_t loopLength,
+                       int64_t latencySamples);
 
     /** Publish the block peak to the outputLevel meter. */
     void finishBlock();

@@ -46,6 +46,19 @@ One codebase builds both a standalone application and a VST3 plugin.
   if natural percussion sounds are wanted later, only the click-buffer
   generation in `LooperEngine::prepare()` needs to change (e.g. BinaryData
   WAVs).
+- **Latency compensation** ("Latency" slider, in samples): recording writes
+  are shifted earlier by the configured round-trip latency, and a stopped
+  base take keeps recording that many samples past its nominal end before
+  finalizing - so overdubs land where the material was *heard*, and the
+  loop length stays exact. The standalone initialises the value from the
+  audio device's reported input+output latency; in a plugin there is no
+  host API for device latency, so set it manually there.
+- **Host-grid alignment** (plugin): while the host transport runs, the
+  engine aligns its bar grid - armed take starts, metronome accents and
+  the beat LED - to the host's bar lines (using the playhead's position,
+  tempo and time signature). Without a host, or while the transport is
+  stopped, the last known grid offset is kept (initially the internal
+  grid). The time signature follows the host numerator when available.
 - **Clearing all channels frees the loop length**: when every channel is
   empty, the next recording defines a fresh loop length (and a fresh bar
   grid).
@@ -112,15 +125,13 @@ opens CMake projects natively.
 ## Roadmap
 
 - ~~Bar-quantized first take via host tempo (`AudioPlayHead`)~~ - done.
-  Possible refinements: align the bar grid to the *host's* bar position
-  (currently anchored at the take's start), configurable time signature
-  (currently fixed 4/4), sample-accurate instead of block-accurate
-  finalization at the boundary.
+- ~~Latency compensation~~ - done.
+- ~~Beat LED / metronome~~ - done.
 - Real-time-safe undo snapshots (preallocated buffers, no allocation on the
   audio thread).
-- Latency compensation: report/compensate input+output latency so recorded
-  material lands sample-accurate in the loop.
 - MIDI learn / configurable mapping, per-channel volume, solo, feedback mute.
+- Robust host transport sync (cycle/loop mode of the DAW, tempo automation,
+  host position re-anchoring after seeks).
 - Dynamic channel count (engine already abstracts over the channel list; the
   fixed array in `LooperEngine` is the only place to change).
 - Persistence: save/load loops (e.g., per-channel wav, or a single session

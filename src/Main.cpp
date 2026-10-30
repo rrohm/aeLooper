@@ -48,6 +48,12 @@ public:
         std::cerr << "aeLooper audio: " << deviceInfo << std::endl;
         if (auto* currentDevice = audioDeviceManager.getCurrentAudioDevice())
         {
+            const int deviceLatency = currentDevice->getInputLatencyInSamples()
+                                    + currentDevice->getOutputLatencyInSamples();
+            processor->getEngine().setLatency(deviceLatency);
+            std::cerr << "aeLooper latency (in+out): " << deviceLatency
+                      << " samples" << std::endl;
+
             const auto midiCount = juce::MidiInput::getAvailableDevices().size();
             std::cerr << "aeLooper midi inputs available: " << midiCount << std::endl;
         }
@@ -69,7 +75,7 @@ public:
                                    [proc = processor.get()] { return proc->getBusLevel(); }),
                         true);
         setResizable(true, false);
-        centreWithSize(780, 530);
+        centreWithSize(920, 530);
         setVisible(true);
     }
 

@@ -26,7 +26,8 @@ void LooperChannel::prepareBlock(int numSamplesInBlock)
 }
 
 void LooperChannel::processSample(float inL, float inR, float& outL, float& outR,
-                                  int64_t positionInLoop, int64_t loopLength)
+                                  int64_t positionInLoop, int64_t loopLength,
+                                  int64_t latencySamples)
 {
     outL = 0.0f;
     outR = 0.0f;
@@ -38,18 +39,28 @@ void LooperChannel::processSample(float inL, float inR, float& outL, float& outR
     switch (st)
     {
         case LoopState::recording:
-            // Append the input to the growing base take and monitor it.
-            buffer.setSample(0, (int) recordLength, inL);
-            if (bufChannels > 1)
-                buffer.setSample(1, (int) recordLength, inR);
+        {
+            // Append the input to the growing base take, shifted earlier by
+            // the latency (the audio was produced that much time before it
+            // arrives in the input buffer). Samples whose shifted index is
+            // negative predate the take start and are dropped.
+            const int64_t writeIndex = recordLength - latencySamples;
+
+            if (writeIndex >= 0)
+            {
+                buffer.setSample(0, (int) writeIndex, inL);
+                if (bufChannels > 1)
+                    buffer.setSample(1, (int) writeIndex, inR);
+            }
             ++recordLength;
             outL = inL;
             outR = inR;
             break;
+        }
 
         case LoopState::overdubbing:
         {
-            const int idx = (int) juce::jlimit((int64_t) 0, loopLength - 1, positionInLoop);
+            const int idx = (int) loopMod(positionInLoop - latencySamples, loopLength);
             if (idx < buffer.getNumSamples())
             {
                 const float l = buffer.getSample(0, idx) + inL;
@@ -134,11 +145,25 @@ void LooperChannel::finalizeTake(int64_t takeLength)
     setState(LoopState::playing);
 }
 
-bool LooperChannel::finishQuantizedStop(int64_t& loopLengthInOut)
+bool LooperChannel::finishQuantizedStop(int64_t& loopLengthInOut, int64_t latencySamples)
 {
     if (state.load(std::memory_order_relaxed) != LoopState::recording
-        || pendingStopBoundary <= 0
-        || recordLength < pendingStopBoundary)
+        || pendingStopBoundary < 0)
+        return false;
+
+    // A zero-length take (record/stop pressed immediately) is discarded.
+    if (pendingStopBoundary <= 0)
+    {
+        buffer.setSize(2, 0);
+        recordLength = 0;
+        pendingStopBoundary = -1;
+        setState(LoopState::empty);
+        return false;
+    }
+
+    // Recording continues until the nominal end plus the latency, so the
+    // last in-flight samples still land inside the take.
+    if (recordLength < pendingStopBoundary + latencySamples)
         return false;
 
     const int64_t boundary = pendingStopBoundary;
@@ -147,9 +172,8 @@ bool LooperChannel::finishQuantizedStop(int64_t& loopLengthInOut)
     return true;
 }
 
-bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples)
+void LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthInSamples)
 {
-    bool definedLoopLength = false;
     Command cmd;
 
     while (commands.pop(cmd))
@@ -195,19 +219,14 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
                         break;
 
                     case LoopState::recording:
-                        if (barLengthInSamples > 0)
-                        {
-                            // Quantized stop: keep recording (and monitoring)
-                            // until the next bar boundary.
-                            pendingStopBoundary = ((recordLength + barLengthInSamples - 1)
-                                                   / barLengthInSamples) * barLengthInSamples;
-                        }
-                        else
-                        {
-                            finalizeTake(recordLength);
-                            loopLengthInOut = recordLength;
-                            definedLoopLength = true;
-                        }
+                        // Stop the base take. The nominal end is the next bar
+                        // boundary with quantization, or "now" without it;
+                        // finishQuantizedStop() finalizes once the latency
+                        // extension has been recorded.
+                        pendingStopBoundary = barLengthInSamples > 0
+                            ? ((recordLength + barLengthInSamples - 1)
+                               / barLengthInSamples) * barLengthInSamples
+                            : recordLength;
                         break;
 
                     case LoopState::overdubbing:
@@ -266,7 +285,6 @@ bool LooperChannel::consumeCommands(int64_t& loopLengthInOut, int64_t barLengthI
     }
 
     undoDepth.store((int) undoStack.size(), std::memory_order_relaxed);
-    return definedLoopLength;
 }
 
 void LooperChannel::pushUndo(const juce::AudioBuffer<float>& content, LoopState stateAfterUndo)
