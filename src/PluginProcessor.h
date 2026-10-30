@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "LooperEngine.h"
 #include "MidiController.h"
+#include <atomic>
 
 /**
     Shared audio processor used by both targets:
@@ -44,10 +45,13 @@ public:
 
     //==== aeLooper ====
     LooperEngine& getEngine() noexcept { return engine; }
+    /** Peak level of the output bus as it leaves processBlock. */
+    float getBusLevel() const noexcept { return busLevel.load(std::memory_order_relaxed); }
 
 private:
     LooperEngine engine;
     MidiController midiController;
+    std::atomic<float> busLevel { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AeLooperAudioProcessor)
 };

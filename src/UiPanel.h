@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "LooperEngine.h"
+#include <functional>
 
 /**
     The shared looper UI: a header with transport/loop info and one strip per
@@ -16,7 +17,12 @@ class UiPanel : public juce::Component,
                private juce::Timer
 {
 public:
-    explicit UiPanel(LooperEngine& engineToUse);
+    /**
+        @param engineToUse          the engine to display and control
+        @param outLevelProvider    optional callback returning the peak level
+                                   of the final output bus (for the meter)
+    */
+    UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvider = {});
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -46,8 +52,10 @@ private:
     };
 
     LooperEngine& engine;
+    std::function<float()> outLevelProvider;
     juce::Label headerLabel;
-    LevelMeter inputMeter;
+    LevelMeter outMeter;   ///< final output bus level (left meter)
+    LevelMeter inputMeter; ///< engine input level (right meter)
     std::vector<std::unique_ptr<ChannelStrip>> strips;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UiPanel)

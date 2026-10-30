@@ -3,7 +3,7 @@
 AeLooperAudioProcessorEditor::AeLooperAudioProcessorEditor(AeLooperAudioProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
-      panel(p.getEngine())
+      panel(p.getEngine(), [&p] { return p.getBusLevel(); })
 {
     setSize(720, 480);
     addAndMakeVisible(panel);

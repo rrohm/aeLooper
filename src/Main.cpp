@@ -1,6 +1,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include "UiPanel.h"
+#include <iostream>
 
 /**
     Standalone entry point. The same AeLooperAudioProcessor used by the VST3
@@ -25,6 +26,33 @@ public:
         // runs but processBlock() is never invoked.
         audioDeviceManager.addAudioCallback(&player);
 
+        // Log which device was actually opened; visible in Qt Creator's
+        // "Application output" pane when the debugger is attached.
+        juce::String deviceInfo;
+        if (auto* currentDevice = audioDeviceManager.getCurrentAudioDevice())
+        {
+            deviceInfo << audioDeviceManager.getCurrentAudioDeviceType()
+                       << " " << currentDevice->getName()
+                       << ", " << (int) currentDevice->getCurrentSampleRate() << " Hz"
+                       << ", block " << currentDevice->getCurrentBufferSizeSamples()
+                       << ", active inputs "
+                       << currentDevice->getActiveInputChannels().countNumberOfSetBits()
+                       << ", active outputs "
+                       << currentDevice->getActiveOutputChannels().countNumberOfSetBits();
+        }
+        else
+        {
+            deviceInfo = "NO AUDIO DEVICE OPENED";
+        }
+
+        std::cerr << "aeLooper audio: " << deviceInfo << std::endl;
+        if (auto* currentDevice = audioDeviceManager.getCurrentAudioDevice())
+        {
+            const auto midiCount = juce::MidiInput::getAvailableDevices().size();
+            std::cerr << "aeLooper midi inputs available: " << midiCount << std::endl;
+        }
+        setName("aeLooper  [" + deviceInfo + "]");
+
         // Enable the first available MIDI input; its events are forwarded to
         // the processor by the AudioProcessorPlayer.
         const auto midiInputs = juce::MidiInput::getAvailableDevices();
@@ -37,7 +65,9 @@ public:
 
         player.setProcessor(processor.get());
 
-        setContentOwned(new UiPanel(processor->getEngine()), true);
+        setContentOwned(new UiPanel(processor->getEngine(),
+                                   [proc = processor.get()] { return proc->getBusLevel(); }),
+                        true);
         setResizable(true, false);
         centreWithSize(720, 480);
         setVisible(true);

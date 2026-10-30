@@ -1,11 +1,13 @@
 #include "UiPanel.h"
 
-UiPanel::UiPanel(LooperEngine& engineToUse)
-    : engine(engineToUse)
+UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvider)
+    : engine(engineToUse),
+      outLevelProvider(std::move(outLevelProvider))
 {
     headerLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(headerLabel);
     addAndMakeVisible(inputMeter);
+    addAndMakeVisible(outMeter);
 
     for (int i = 0; i < engine.getNumChannels(); ++i)
     {
@@ -61,6 +63,7 @@ void UiPanel::resized()
 
     auto header = bounds.removeFromTop(28);
     inputMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
+    outMeter.setBounds(header.removeFromRight(14).withSizeKeepingCentre(10, 24));
     headerLabel.setBounds(header);
 
     const int rowHeight = juce::jmax(30, bounds.getHeight() / juce::jmax(1, (int) strips.size()));
@@ -133,4 +136,10 @@ void UiPanel::timerCallback()
 
     inputMeter.setLevel(juce::jmax(engine.getInputLevel(), inputMeter.level * 0.85f));
     inputMeter.repaint();
+
+    if (outLevelProvider)
+    {
+        outMeter.setLevel(juce::jmax(outLevelProvider(), outMeter.level * 0.85f));
+        outMeter.repaint();
+    }
 }
