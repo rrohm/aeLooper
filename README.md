@@ -12,6 +12,10 @@ One codebase builds both a standalone application and a VST3 plugin.
   fill and the textual loop info; with "Quantize to bars" enabled it shows
   the loop as bars x beats-per-bar rounded boxes (border only), with the
   current beat's box filled and the text hidden.
+- **Color scheme**: two poles in `src/ColorScheme.h` - base `#4ed6c5` and
+  accent `#ffe35b`. Every UI color is derived from them; the accent is used
+  only for the Mute button in its active state. Change the two constants to
+  re-theme the app.
 
 - **4 parallel loop channels.** Each channel accumulates its audio in a single
   buffer (non-destructive overdub: input is added to the existing material).
