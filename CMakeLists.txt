@@ -22,6 +22,7 @@ endif()
 # Sources shared by the standalone app and the VST3 plugin
 # ---------------------------------------------------------------------------
 set(AELOOPER_COMMON_SOURCES
+    src/ColorScheme.h
     src/LooperChannel.h
     src/LooperChannel.cpp
     src/LooperEngine.h

@@ -1,6 +1,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include "UiPanel.h"
+#include "ColorScheme.h"
 #include <iostream>
 
 /**
@@ -19,6 +20,7 @@ public:
                                juce::DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar(true);
+        setBackgroundColour(ColorScheme::background());
 
         audioDeviceManager.initialiseWithDefaultDevices(2, 2);
 

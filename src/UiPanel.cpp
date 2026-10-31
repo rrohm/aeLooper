@@ -1,10 +1,11 @@
 #include "UiPanel.h"
+#include "ColorScheme.h"
 
 void UiPanel::StateLabel::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
 
-    g.setColour(juce::Colour(0xff23262c));
+    g.setColour(ColorScheme::fieldBackground());
     g.fillRoundedRectangle(bounds, cornerRadius);
 
     // Waveform as background, anchored at the bottom edge (zero line one
@@ -13,7 +14,7 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
     // layer rather than what is currently heard.
     if (waveColumns > 0)
     {
-        g.setColour(juce::Colours::lightgrey.withAlpha(waveIsRedo ? 0.22f : 0.45f));
+        g.setColour(waveIsRedo ? ColorScheme::waveformRedo() : ColorScheme::waveform());
 
         const float bottom = bounds.getBottom() - 2.0f;
         const float halfH = juce::jmax(1.0f, (bounds.getHeight() - 4.0f) * 0.5f);
@@ -28,22 +29,22 @@ void UiPanel::StateLabel::paint(juce::Graphics& g)
         }
     }
 
-    g.setColour(juce::Colours::darkgrey);
+    g.setColour(ColorScheme::border());
     g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 
     // Text centered like the button captions.
-    g.setColour(juce::Colours::lightgrey);
+    g.setColour(ColorScheme::text());
     g.setFont(font);
     g.drawFittedText(text, bounds.reduced(2.0f).toNearestInt(), juce::Justification::centred, 1);
 }
 
 void UiPanel::StatusBar::paint(juce::Graphics& g)
 {
-    const auto baseColour = juce::Colour(0xff2a3f5f);   // progress-bar blue as the base
+    const auto baseColour = ColorScheme::progress();
 
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
 
-    g.setColour(juce::Colour(0xff23262c));
+    g.setColour(ColorScheme::fieldBackground());
     g.fillRoundedRectangle(bounds, 6.0f);
 
     if (info.quantized)
@@ -67,19 +68,19 @@ void UiPanel::StatusBar::paint(juce::Graphics& g)
 
                 if (i == info.currentBox)
                 {
-                    g.setColour(baseColour.withMultipliedBrightness(1.8f));
+                    g.setColour(ColorScheme::currentBoxFill());
                     g.fillRoundedRectangle(box, 3.0f);
                 }
                 else
                 {
-                    g.setColour(isDownbeat ? baseColour.withMultipliedBrightness(1.4f)
-                                           : baseColour.withMultipliedBrightness(0.7f));
+                    g.setColour(isDownbeat ? ColorScheme::downbeatBorder()
+                                           : ColorScheme::boxBorder());
                     g.drawRoundedRectangle(box, 3.0f, 1.0f);
                 }
             }
         }
 
-        g.setColour(baseColour.withMultipliedBrightness(0.7f));
+        g.setColour(ColorScheme::border());
         g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
     }
     else
@@ -91,11 +92,11 @@ void UiPanel::StatusBar::paint(juce::Graphics& g)
             g.fillRoundedRectangle(bounds.withWidth(bounds.getWidth() * (float) info.progress), 6.0f);
         }
 
-        g.setColour(baseColour.withMultipliedBrightness(0.7f));
+        g.setColour(ColorScheme::border());
         g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
 
         // Info text with a half-em left padding.
-        g.setColour(juce::Colours::lightgrey);
+        g.setColour(ColorScheme::text());
         g.setFont(font);
         const float leftPad = font.getHeight() * 0.5f;
         g.drawFittedText(info.text, bounds.reduced(leftPad, 0.0f).toNearestInt(),
@@ -112,6 +113,23 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
     addAndMakeVisible(statusBar);
 
     // ---- bar quantization controls ----
+    for (auto* toggle : { &quantizeButton, &metronomeButton, &countInButton })
+    {
+        toggle->setColour(juce::ToggleButton::tickColourId, ColorScheme::tick());
+        toggle->setColour(juce::TextButton::textColourOffId, ColorScheme::text());
+    }
+
+    for (auto* slider : { &bpmSlider, &latencySlider })
+    {
+        slider->setColour(juce::Slider::trackColourId, ColorScheme::border());
+        slider->setColour(juce::Slider::thumbColourId, ColorScheme::buttonFace());
+        slider->setColour(juce::Slider::textBoxOutlineColourId, ColorScheme::border());
+        slider->setColour(juce::Slider::textBoxBackgroundColourId, ColorScheme::fieldBackground());
+        slider->setColour(juce::Slider::textBoxTextColourId, ColorScheme::text());
+    }
+
+    tempoSourceLabel.setColour(juce::Label::textColourId, ColorScheme::text());
+
     quantizeButton.onClick = [this]
     {
         engine.setQuantizeEnabled(quantizeButton.getToggleState());
@@ -169,11 +187,14 @@ UiPanel::UiPanel(LooperEngine& engineToUse, std::function<float()> outLevelProvi
         s->redoButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::redo); };
         s->clearButton.onClick = [this, s] { engine.pushCommand(s->channelIndex, LooperChannel::Command::clear); };
 
-        // Hand cursor over the clickable controls.
+        // Hand cursor over the clickable controls; strip buttons use the
+        // scheme's button colors.
         for (auto* button : { &s->recordButton, &s->muteButton, &s->undoButton, &s->redoButton, &s->clearButton })
         {
             button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
             button->setLookAndFeel(&stripLookAndFeel);
+            button->setColour(juce::TextButton::buttonColourId, ColorScheme::buttonFace());
+            button->setColour(juce::TextButton::textColourOffId, ColorScheme::buttonText());
         }
 
         const auto keyName = juce::String(s->channelIndex + 1);
@@ -244,9 +265,9 @@ void UiPanel::ChannelNumberField::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
 
-    g.setColour(juce::Colour(0xff23262c));
+    g.setColour(ColorScheme::fieldBackground());
     g.fillRoundedRectangle(bounds, cornerRadius);
-    g.setColour(juce::Colours::darkgrey);
+    g.setColour(ColorScheme::border());
     g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 
     // Fixed oversized font (at the default window size the field is ~24 px
@@ -256,11 +277,11 @@ void UiPanel::ChannelNumberField::paint(juce::Graphics& g)
     constexpr float bigFontSize = 88.0f;
     auto font = juce::Font(juce::FontOptions().withHeight(bigFontSize));
     g.setFont(font);
-    g.setColour(juce::Colours::lightgrey);
+    g.setColour(ColorScheme::text());
 
     const auto text = juce::String(channelNumber);
-    const float x = bounds.getCentreX() - font.getStringWidthFloat(text) * 0.5f;
-    const float baseline = bounds.getY() + font.getAscent() - 4.0f;
+    const float x = bounds.getCentreX() - font.getStringWidthFloat(text) * 0.65f;
+    const float baseline = bounds.getY() + font.getAscent() - 16.0f;
     g.drawSingleLineText(text, (int) x, (int) baseline);
 }
 
@@ -272,34 +293,34 @@ UiPanel::ChannelStrip::ChannelStrip(int index)
 
 void UiPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId).darker(0.2f));
+    g.fillAll(ColorScheme::background());
 }
 
 void UiPanel::LevelMeter::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    g.fillAll(juce::Colours::black);
+    g.fillAll(ColorScheme::fieldBackground());
 
     const float levelToShow = juce::jlimit(0.0f, 1.0f, level);
     auto barHeight = bounds.getHeight() * levelToShow;
-    g.setColour(levelToShow > 0.85f ? juce::Colours::red
-                : levelToShow > 0.5f  ? juce::Colours::orange
-                                     : juce::Colours::green);
+    g.setColour(levelToShow > 0.85f ? ColorScheme::meterHigh()
+                : levelToShow > 0.5f  ? ColorScheme::meterMid()
+                                     : ColorScheme::meterLow());
     g.fillRect(bounds.removeFromBottom(barHeight));
 }
 
 void UiPanel::BeatLed::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    g.fillAll(juce::Colours::black);
+    g.fillAll(ColorScheme::fieldBackground());
 
-    const auto colour = accent ? juce::Colours::orange : juce::Colours::limegreen;
+    const auto colour = accent ? ColorScheme::ledDownbeat() : ColorScheme::led();
     const auto circle = bounds.reduced(2.0f);
 
     // dim base glow so the idle LED stays visible, full brightness at the beat
     g.setColour(colour.withAlpha(juce::jlimit(0.15f, 1.0f, level)));
     g.fillEllipse(circle);
-    g.setColour(juce::Colours::darkgrey);
+    g.setColour(ColorScheme::border());
     g.drawEllipse(circle, 1.0f);
 }
 
@@ -465,21 +486,22 @@ void UiPanel::timerCallback()
             : state == LoopState::overdubbing ? "Stop overdub"
             : "Overdub");
 
-        // Mute is a plain TextButton; its colors mark the state:
-        // dimmed grey when not muted, subdued red when muted.
+        // Mute is a plain TextButton; its colors mark the state. The accent
+        // color is reserved for the active (muted) state; inactive uses a
+        // dark, faded derivative of the accent, close to the other fields.
         if (channel.isMuted())
         {
             strip->muteButton.setColour(juce::TextButton::buttonColourId,
-                                        juce::Colour(0xff8b2323));
+                                        ColorScheme::muteActive());
             strip->muteButton.setColour(juce::TextButton::textColourOffId,
-                                        juce::Colours::white);
+                                        ColorScheme::buttonText());
         }
         else
         {
             strip->muteButton.setColour(juce::TextButton::buttonColourId,
-                                        juce::Colour(0xff2c2f36));
+                                        ColorScheme::muteInactive());
             strip->muteButton.setColour(juce::TextButton::textColourOffId,
-                                        juce::Colours::grey);
+                                        ColorScheme::text().withAlpha(0.6f));
         }
 
         strip->undoButton.setEnabled(channel.getUndoDepth() > 0);
