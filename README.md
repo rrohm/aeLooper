@@ -5,6 +5,9 @@ defines the loop length for all channels; every channel can overdub, mute and
 undo independently, and the whole looper is remote-controllable via MIDI notes.
 One codebase builds both a standalone application and a VST3 plugin.
 
+This project started as a test balloon for audio projects on Linux with JUCE, 
+together with an evaluation of Mistral Vibe for coding support.
+
 ## Concept
 
 - **Status bar at the bottom of the window**: in free-running mode a rounded,
