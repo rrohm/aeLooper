@@ -18,7 +18,7 @@ struct ColorScheme
 {
     // ---- the two poles: change only these ----
     static constexpr juce::uint32 baseColorValue   = 0xff4ed6c5;   ///< general base color (teal)
-    static constexpr juce::uint32 accentColorValue = 0xffe35b;     ///< accent / signal color (yellow)
+    static constexpr juce::uint32 accentColorValue = 0xffffe35b;   ///< accent / signal color (yellow)
 
     static juce::Colour base()   { return juce::Colour(baseColorValue); }
     static juce::Colour accent() { return juce::Colour(accentColorValue); }
